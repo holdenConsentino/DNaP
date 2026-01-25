@@ -1,0 +1,9 @@
+#artifacts
+*.o
+*.elf
+*.bin
+*.img
+*.iso
+*.log
+core
+.gitkeys
