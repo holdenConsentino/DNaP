@@ -194,7 +194,11 @@ stagetwostart:
         mov ss, ax
         mov ds, ax
         mov es, ax
-        mov esp, 0x90000
+        mov gs, ax
+        mov fs, ax
+        mov esp, 0x08000000
+        and esp, 0xFFFFFFF0
+        mov ebp, esp
         
         mov edi, idt_buffer
         mov esi, isr_stub
