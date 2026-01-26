@@ -249,16 +249,18 @@ picmap:
        
         movzx ebx, word [pitch]
         shl ebx, 4
-        add ebx, 16        
         sti
         
-        mov byte [printarguments + 4], 'H'
-        mov dword [printarguments], ebx
-        mov word [printarguments + 5], 0xFFFF
-        call printchar
-        add dword [printarguments], 32
-        mov byte [printarguments + 4], 'I'
-        call printchar
+        
+
+        mov esi, testmessage
+        
+        mov eax, 16
+        add eax, ebx
+        
+        mov ebx, 0xFFFF
+        call printstring
+        
         
         hlt
         jmp $
@@ -360,7 +362,7 @@ printchar: ; well fuck I guess we're doing it the hard way. character in al, fra
 
         xor ecx, ecx
 
-.setup:
+.printsetup:
         xor eax, eax
         xor edx, edx
         mov ax, word [esi + ecx*2]
@@ -387,7 +389,7 @@ printchar: ; well fuck I guess we're doing it the hard way. character in al, fra
         movzx ebx, word [pitch]
         add edi, ebx
         pop ebx
-        jmp .setup
+        jmp .printsetup
         
 
 .printpix:
@@ -397,7 +399,42 @@ printchar: ; well fuck I guess we're doing it the hard way. character in al, fra
         pop ebx
         jmp .printed        
         
+printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. Supports 0x0A and 0x0D.
+        pushad
+        mov dword [printarguments], eax
+        cld
+        mov [initoffset], eax
+        xor ecx, ecx
+        mov word [printarguments + 5], bx
+.loop:
+        lodsb
+        test al, al
+        jz .endprint
+        cmp al, 0x0D
+        je .cr
+        cmp al, 0x0A
+        je .newline
+        mov byte [printarguments + 4], al
+        call printchar
+        add dword [printarguments], 32
+        jmp .loop
+        
 
+.cr:
+        mov ecx, [initoffset]
+        mov dword [printarguments], ecx
+        jmp .loop
+.newline:
+        movzx ecx, word [pitch]
+        shl ecx, 4
+        add dword [printarguments], ecx
+        add dword [initoffset], ecx
+        jmp .loop
+
+.endprint:
+        popad
+        ret
+        
         
 errorcodes dd 0 ; jmp over
 printarguments: ; qword
@@ -406,7 +443,9 @@ printarguments: ; qword
         dw 0 ; color
         db 0 ; padding / counter
 
-CHARACTERS
+CHARSHEET
 hexlut db "0123456789ABCDEF"
+testmessage db 0x0D, 0x0A, "HELLO THERE!", 0x0D, 0x0A, "This is my little bootloader. Do you like it?", 0x0D, 0x0A, "1234567890!@#$%^&*()-_=+\][{}/><,.~``]", 0x00
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
+initoffset resb 1
