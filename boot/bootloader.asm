@@ -426,7 +426,10 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         jmp .loop
 .newline:
         movzx ecx, word [pitch]
+        movzx edx, word [pitch]
         shl ecx, 4
+        shl edx, 1
+        add ecx, edx
         add dword [printarguments], ecx
         add dword [initoffset], ecx
         jmp .loop
@@ -445,7 +448,7 @@ printarguments: ; qword
 
 CHARSHEET
 hexlut db "0123456789ABCDEF"
-testmessage db 0x0D, 0x0A, "HELLO THERE!", 0x0D, 0x0A, "This is my little bootloader. Do you like it?", 0x0D, 0x0A, "1234567890!@#$%^&*()-_=+\][{}/><,.~``]", 0x00
+testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
 initoffset resb 1
