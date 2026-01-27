@@ -189,7 +189,25 @@ isr%1:
         jmp default_handler
 %endmacro
 
-stagetwostart:
+
+%macro SCREENFILL 1
+        mov edi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        mov eax, %1
+        rep stosd
+%endmacro
+%macro PRINTMSG 3
+        mov esi, %1
+        mov eax, %2
+        mov ebx, %3
+        call printstring
+%endmacro
+%macro TERMINATE 0
+        hlt
+        jmp $
+%endmacro
+
+  stagetwostart:
         mov ax, 0x10
         mov ss, ax
         mov ds, ax
@@ -317,7 +335,6 @@ NOERROR i
 %assign i i+1
 %endrep
 
-
 isr_stub:
         dd isr0, isr1, isr2, isr3, isr4, isr5, isr6, isr7, isr8, isr9, isr10, isr11, isr12, isr13, isr14, isr15, isr16, isr17, isr18
         dd isr19, isr20, isr21, isr22, isr23, isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
@@ -332,12 +349,16 @@ isr_stub:
         %error "Guess who fucked up the IDT stubs? You did! :)"
 %endif
 
-;keyboard_handler: ; keyboard int handler
- ;       in al, 0x60
-  ;      mov byte [printarguments + 4], al
-   ;     mov word [printarguments + 5], 0xFFFF
-    ;    call printstring
-     ;   ret
+keyboard_handler: ; keyboard int handler
+        in al, 0x60
+        ;mov byte [printarguments + 4], al
+        ;mov word [printarguments + 5], 0xFFFF
+        ;call printchar
+        ;add dword [printarguments], 32
+        ;add dword [initoffset], 32
+        mov edi, [framebuffer]
+        mov dword [edi], 0xFF00FF00
+        ret
         
 
 default_handler:
@@ -349,7 +370,8 @@ default_handler:
         mov eax, [esp + 40] ; get number
         mov ebx, [esp + 44] ; get code
 
-        
+        mov ecx, [handlers + eax * 4]
+        call ecx        
         
         cmp eax, 32
         jb .no_eoi
@@ -363,14 +385,141 @@ default_handler:
         add esp, 8
         popfd
         iretd
-;handlers:
- ;       dd DivZero, SingleStep, HardwareFailure, BreakPoint, OverFlow, ExceedsBounds, InvalidOpcode, DevNotAvail, DoubleFault, CoPOver, TSSCorrupt, InvalidSegment, StackFault, GPFault, Page, NULLFAULT, FPUError, AlignFault, MachineFault, SimdFault
-  ;      times 11 dd NULLFAULT
-        
+
+handlers:
+        dd DivZero, SingleStep, HardwareFailure, BreakPoint, OverFlow, ExceedsBounds, InvalidOpcode, DevNotAvail, DoubleFault, NULLFAULT, TSSCorrupt, InvalidSegment, StackFault, GPFault, Page, NULLFAULT, FPUError, AlignFault, MachineFault, SimdFault
+        times 11 dd NULLFAULT
+        dd timer_handler
+        dd keyboard_handler
+timer_handler:
+ret
 
 DivZero:
+        mov edi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        mov eax, 0x00000000
+        rep stosd
+        mov esi, divzeromsg
+        xor eax, eax
+        mov ebx, 0xFFFF
+        call printstring
+        ;hlt
+        ;jmp $ ; CHANGE THIS LATER
+        ret
+SingleStep:
+        mov edi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        mov eax, 0x00000000
+        rep stosd
+        mov esi, singlestepmsg
+        xor eax, eax
+        mov ebx, 0xFFFF
+        call printstring
         hlt
         jmp $
+
+HardwareFailure:
+        mov edi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        mov eax, 0x0000
+        rep stosd
+        mov esi, hardwarefailuremsg
+        xor eax, eax
+        mov ebx, 0xFFFF
+        call printstring
+        hlt
+        jmp $
+
+BreakPoint:
+        ret ; ADD SOMETHING MORE HERE TODO
+OverFlow:
+        mov edi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        mov eax, 0x000;00000
+        rep stosd
+        mov esi, overflowmsg
+        xor eax, eax
+        mov ebx, 0xFFFF
+        call printstring
+        hlt
+        jmp $
+
+ExceedsBounds:
+        SCREENFILL 0x000;00000
+        PRINTMSG exceedsboundsmsg, 0, 0xFFFF
+        hlt
+        jmp $
+
+InvalidOpcode:
+        SCREENFILL 0x0000;0000
+        PRINTMSG invalidopcodemsg, 0, 0xFFFF
+        TERMINATE
+DevNotAvail:
+        SCREENFILL 0x00000000
+        PRINTMSG devnotavailmsg, 0, 0xFFFF
+        TERMINATE
+DoubleFault:
+        SCREENFILL 0x00000000
+        PRINTMSG doublefaultmsg, 0, 0xFFFF
+        ret ; yes, going back
+TSSCorrupt:
+        SCREENFILL 0x00000000
+        PRINTMSG tsscorruptmsg, 0, 0xFFFF
+        TERMINATE
+InvalidSegment:
+        SCREENFILL 0x00000000
+        PRINTMSG invsegmsg, 0, 0xFFFF
+        TERMINATE
+StackFault:
+        SCREENFILL 0x00000000
+        PRINTMSG stackfaultmsg, 0, 0xFFFF
+        TERMINATE
+GPFault:
+        SCREENFILL 0x00000000
+        PRINTMSG gpfaultmsg, 0, 0xFFFF
+        TERMINATE
+Page:
+        SCREENFILL 0x00000000
+        PRINTMSG pagefaultmsg, 0, 0xFFFF
+        ret ; I don't yet have paging so who gives a shit
+FPUError:
+        SCREENFILL 0x00000000
+        PRINTMSG fpuerrormsg, 0, 0xFFFF
+        ret
+AlignFault:
+        SCREENFILL 0x00000000
+        PRINTMSG alignfaultmsg, 0, 0xFFFF
+        ret
+MachineFault:
+        SCREENFILL 0x00000000
+        PRINTMSG machinefaultmsg, 0, 0xFFFF
+        TERMINATE
+SimdFault:
+        SCREENFILL 0x00000000
+        PRINTMSG simdfaultmsg, 0, 0xFFFF
+        ret
+NULLFAULT:
+        ret
+exceedsboundsmsg db "Bounds overflow?!", 0x0D, 0x0A, 0x00
+invalidopcodemsg db "Invalid Opcode", 0x0D, 0x0A, 0x00
+devnotavailmsg db "Device Not Available", 0x0D, 0x0A, 0x00
+doublefaultmsg db "DOUBLE FAULT RETURNING", 0x0D, 0x0A, 0x00
+tsscorruptmsg db "Invalid TSS", 0x0D, 0x0A, 0x00
+invsegmsg db "Invalid Segment selectors", 0x0D, 0x0A, 0x00
+stackfaultmsg db "Bad Stack", 0x0D, 0x0A, 0x00
+gpfaultmsg db "General Protection Fault", 0x0D, 0x0A, 0x00
+pagefaultmsg db "Page fault", 0x0D, 0x0A, 0x00
+fpuerrormsg db "FPU Error", 0x0D, 0x0A, 0x00
+alignfaultmsg db "Alignment Fault", 0x0D, 0x0A, 0x00
+machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Yer' fucked", 0x0D, 0x0A, 0x00
+simdfaultmsg db "SIMD fault", 0x0D, 0x0A, 0x00
+
+         
+overflowmsg db "Who the actual fuck uses INTO?", 0x0D, 0x0A, 0x00
+
+hardwarefailuremsg db "Critical Hardware Failure", 0x0D, 0x0A, 0x00
+singlestepmsg db "SingleStep", 0x0D, 0x0A, 0x00
+
 printchar: ; well fuck I guess we're doing it the hard way. character in al, frame offset in ebx
         pushfd
         pushad
@@ -473,6 +622,8 @@ printarguments: ; qword
 CHARSHEET
 hexlut db "0123456789ABCDEF"
 testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
+divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
+
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
-initoffset resb 1
+initoffset resd 1
