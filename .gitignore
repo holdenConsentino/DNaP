@@ -5,5 +5,6 @@
 *.img
 *.iso
 *.log
+*.sh
 core
 .gitkeys
