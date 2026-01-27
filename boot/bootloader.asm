@@ -258,9 +258,15 @@ picmap:
         mov eax, 16
         add eax, ebx
         
-        mov ebx, 0xFFFF
+        mov ebx, 0x44EF
         call printstring
-        
+
+        mov dx, 0x3F2
+        mov al, 0x0C
+        out dx, al ; kill floppy
+
+        xor al, al
+        out dx, al ; reset floppy reader. 
         
         hlt
         jmp $
@@ -315,12 +321,23 @@ NOERROR i
 isr_stub:
         dd isr0, isr1, isr2, isr3, isr4, isr5, isr6, isr7, isr8, isr9, isr10, isr11, isr12, isr13, isr14, isr15, isr16, isr17, isr18
         dd isr19, isr20, isr21, isr22, isr23, isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
+        ;dd keyboard_handler
         %assign i 32
         %rep 224
         dd isr%+i
         %assign i i+1
         %endrep
-        
+
+%if ($ - isr_stub) != (256 * 4)
+        %error "Guess who fucked up the IDT stubs? You did! :)"
+%endif
+
+;keyboard_handler: ; keyboard int handler
+ ;       in al, 0x60
+  ;      mov byte [printarguments + 4], al
+   ;     mov word [printarguments + 5], 0xFFFF
+    ;    call printstring
+     ;   ret
         
 
 default_handler:
@@ -331,10 +348,17 @@ default_handler:
         
         mov eax, [esp + 40] ; get number
         mov ebx, [esp + 44] ; get code
+
         
+        
+        cmp eax, 32
+        jb .no_eoi
+        cmp eax, 47
+        ja .no_eoi  
         mov al, 0x20
         out 0x20, al
         out 0xA0, al
+        .no_eoi:
         popad
         add esp, 8
         popfd
