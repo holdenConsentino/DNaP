@@ -258,7 +258,7 @@ picmap:
         mov eax, 16
         add eax, ebx
         
-        mov ebx, 0x44EF
+        mov ebx, 0x0780
         call printstring
 
         mov dx, 0x3F2
