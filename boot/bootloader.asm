@@ -270,13 +270,11 @@ picmap:
         sti
         
         
-
-        mov esi, testmessage
-        
         mov eax, 16
+        mov esi, testmessage
         add eax, ebx
-        
         mov ebx, 0x0780
+        ;mov [currentoffset], eax
         call printstring
 
         mov dx, 0x3F2
@@ -285,6 +283,11 @@ picmap:
 
         xor al, al
         out dx, al ; reset floppy reader. 
+
+        mov esi, idtupmsg
+        mov ebx, 0x0780
+        mov eax, [initoffset]
+        call printstring
         
         hlt
         jmp $
@@ -364,11 +367,12 @@ keyboard_handler: ; keyboard int handler
 default_handler:
         pushfd
         cli
-        pushad        
+        pushad
+        cld
         ; set up handler
         
-        mov eax, [esp + 40] ; get number
-        mov ebx, [esp + 44] ; get code
+        mov eax, [esp + 36] ; get number
+        mov ebx, [esp + 40] ; get code
 
         mov ecx, [handlers + eax * 4]
         call ecx        
@@ -388,27 +392,27 @@ default_handler:
 
 handlers:
         dd DivZero, SingleStep, HardwareFailure, BreakPoint, OverFlow, ExceedsBounds, InvalidOpcode, DevNotAvail, DoubleFault, NULLFAULT, TSSCorrupt, InvalidSegment, StackFault, GPFault, Page, NULLFAULT, FPUError, AlignFault, MachineFault, SimdFault
-        times 11 dd NULLFAULT
+        times 12 dd NULLFAULT ; 11
         dd timer_handler
         dd keyboard_handler
+        times 14 dd NULLFAULT
 timer_handler:
 ret
 
 DivZero:
         mov edi, [framebuffer]
-        mov ecx, (800 * 600 * 2)
+        mov ecx, (800 * 600 * 2) / 4
         mov eax, 0x00000000
         rep stosd
         mov esi, divzeromsg
         xor eax, eax
         mov ebx, 0xFFFF
         call printstring
-        ;hlt
-        ;jmp $ ; CHANGE THIS LATER
-        ret
+        hlt
+        jmp $ ; CHANGE THIS LATER
 SingleStep:
         mov edi, [framebuffer]
-        mov ecx, (800 * 600 * 2)
+        mov ecx, (800 * 600 * 2) / 4
         mov eax, 0x00000000
         rep stosd
         mov esi, singlestepmsg
@@ -420,7 +424,7 @@ SingleStep:
 
 HardwareFailure:
         mov edi, [framebuffer]
-        mov ecx, (800 * 600 * 2)
+        mov ecx, (800 * 600 * 2) / 4
         mov eax, 0x0000
         rep stosd
         mov esi, hardwarefailuremsg
@@ -434,7 +438,7 @@ BreakPoint:
         ret ; ADD SOMETHING MORE HERE TODO
 OverFlow:
         mov edi, [framebuffer]
-        mov ecx, (800 * 600 * 2)
+        mov ecx, (800 * 600 * 2) / 4
         mov eax, 0x000;00000
         rep stosd
         mov esi, overflowmsg
@@ -623,7 +627,10 @@ CHARSHEET
 hexlut db "0123456789ABCDEF"
 testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
 divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
+idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
+
 
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
 initoffset resd 1
+currentoffset resd 1
