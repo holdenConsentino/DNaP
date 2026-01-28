@@ -1,4 +1,4 @@
-; When I wrote this, only god and I knew how it worked. I don't know how it works anymore, and I don't believe in god. So good luck. 
+;Good luck 
 
 org 0x7C00
 [bits 16]
@@ -288,6 +288,11 @@ picmap:
         mov ebx, 0x0780
         mov eax, [initoffset]
         call printstring
+
+        mov esi, cmdprmpt
+        mov ebx, 0x0780
+        mov eax, [initoffset]
+        call printstring
         
         hlt
         jmp $
@@ -349,18 +354,12 @@ isr_stub:
         %endrep
 
 %if ($ - isr_stub) != (256 * 4)
-        %error "Guess who fucked up the IDT stubs? You did! :)"
+        %error "Guess who messed up the IDT stubs? You did! :)"
 %endif
 
 keyboard_handler: ; keyboard int handler
         in al, 0x60
-        ;mov byte [printarguments + 4], al
-        ;mov word [printarguments + 5], 0xFFFF
-        ;call printchar
-        ;add dword [printarguments], 32
-        ;add dword [initoffset], 32
-        mov edi, [framebuffer]
-        mov dword [edi], 0xFF00FF00
+        
         ret
         
 
@@ -485,7 +484,7 @@ GPFault:
 Page:
         SCREENFILL 0x00000000
         PRINTMSG pagefaultmsg, 0, 0xFFFF
-        ret ; I don't yet have paging so who gives a shit
+        ret ; I don't yet have paging so who gives a care
 FPUError:
         SCREENFILL 0x00000000
         PRINTMSG fpuerrormsg, 0, 0xFFFF
@@ -515,16 +514,16 @@ gpfaultmsg db "General Protection Fault", 0x0D, 0x0A, 0x00
 pagefaultmsg db "Page fault", 0x0D, 0x0A, 0x00
 fpuerrormsg db "FPU Error", 0x0D, 0x0A, 0x00
 alignfaultmsg db "Alignment Fault", 0x0D, 0x0A, 0x00
-machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Yer' fucked", 0x0D, 0x0A, 0x00
+machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Yer' messed", 0x0D, 0x0A, 0x00
 simdfaultmsg db "SIMD fault", 0x0D, 0x0A, 0x00
 
          
-overflowmsg db "Who the actual fuck uses INTO?", 0x0D, 0x0A, 0x00
+overflowmsg db "Who the actual mess uses INTO?", 0x0D, 0x0A, 0x00
 
 hardwarefailuremsg db "Critical Hardware Failure", 0x0D, 0x0A, 0x00
 singlestepmsg db "SingleStep", 0x0D, 0x0A, 0x00
 
-printchar: ; well fuck I guess we're doing it the hard way. character in al, frame offset in ebx
+printchar: ; well mess I guess we're doing it the hard way. character in al, frame offset in ebx
         pushfd
         pushad
         cli
@@ -628,7 +627,8 @@ hexlut db "0123456789ABCDEF"
 testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
 divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
 idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
-
+ioflags db 0
+cmdprmpt db 0x0D, 0x0A, "> this is a commmand!", 0x0D, 0x0A, 0x00
 
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
