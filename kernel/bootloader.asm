@@ -282,12 +282,14 @@ picmap:
         movzx ebx, word [pitch]
         shl ebx, 4
         sti
+
+        call clearscreen
         
         
         mov eax, 16
         mov esi, testmessage
         add eax, ebx
-        mov ebx, 0x001F
+        mov ebx, 0x0F80
         ;mov [currentoffset], eax
         call printstring
 
@@ -299,12 +301,12 @@ picmap:
         out dx, al ; reset floppy reader. 
 
         mov esi, idtupmsg
-        mov ebx, 0x001F
+        mov ebx, 0x0F80
         mov eax, [initoffset]
         call printstring
 
         mov esi, cmdprmpt
-        mov ebx, 0x001F
+        mov ebx, 0x0F80
         mov eax, [initoffset]
         call printstring
         
@@ -408,6 +410,7 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
+        call printscreen ; GET RID OF THIS LATER
         ret
 
 DivZero:
@@ -635,27 +638,72 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
 
 keyboard_handler:
         in al, 0x60
-        cmp al, 128
+        cmp al, 0x80
         jae skipkeyboard
+        cmp al, 0x2A
+        je shift
+        cmp al, 0x36
+        je shift
         movzx eax, al
         ; cursor movement
         movzx eax, byte [chartab + eax]
         cmp al, 0x1C
-        je skipperkb        
-        mov byte [printarguments + 4], al
-        call printchar
-        add dword [printarguments], 32
-        skipkeyboard:
-        mov al, 0x20
+        je skipperkb ; cmp to ENTER
+possiblyshifted:
+        push ebx
+        mov ebx, [newringoffset]
+        mov byte [keyboardringbuffer + ebx], al
+        inc dword [newringoffset]
+        mov byte [keyboardringbuffer + ebx + 1], 0
+        pop ebx
+skipkeyboard:
+        ;cmp al, 0xAA
+        ;je .unshift
+        ;cmp al, 0xB6
+        ;je .unshift
+semishifted:
+
+        mov al, 0x20 ; Send EOI
         out 0x20, al
         ret        
-        chartab db 0x00, 0x00, "1234567890-=", 0x00, 0x00, "qwertyuiop[]", 0x00, 0x00, "asdfghjkl;'`", 0x00, "\zxcvbnm,./", 0x00, 0x20
-        chartabshift db 0x00, 0x00, "!@#$%^&*()_+", 0x00, 0x00, "QWERTYUIOP{}", 0x00, 0x00, 'ASDFGHKL:"~', 0x00, "|ZXCVBNM<>?", 0x00, 0x20
+        chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
+        chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
         skipperkb:
         mov esi, newliner
         mov ebx, 0xFFFF
         call printstring
         jmp skipkeyboard
+
+        shift:
+        movzx eax, al
+        movzx eax, byte [chartabshift + eax]
+        jmp possiblyshifted
+        
+        
+clearscreen:
+        pushfd
+        cli
+        pushad
+        mov edi, [framebuffer]
+        mov ecx, (600 * 800) / 2
+        mov eax, 0
+        rep stosd
+        mov dword [newringoffset], 0
+        mov dword [endoffset], 0
+        mov byte [keyboardringbuffer + 1961], 0
+        mov byte [initoffset], 0
+        popad
+        popfd
+        ret
+
+printscreen:
+        pushad
+        mov esi, keyboardringbuffer
+        mov eax, [initoffset]
+        mov ebx, 0x0F80
+        call printstring
+        popad
+        ret
 
         errorcodes dd 0 ; jmp over
 printarguments: ; qword
@@ -678,3 +726,6 @@ section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
 initoffset resd 1
 currentoffset resd 1
+keyboardringbuffer resb 1962
+newringoffset resd 1
+endoffset resd 1

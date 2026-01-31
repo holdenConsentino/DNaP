@@ -1,4 +1,4 @@
-1. Complete keyboard driver.
+1. Complete keyboard driver. REMOVE print function from driver, write to ring buffer
 2. Complete CLI.
 3. Set up HDD and diskette drivers.
 4. Begin on scheduler.
