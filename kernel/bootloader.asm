@@ -6,7 +6,7 @@ org 0x7C00
 _start:
         mov ax, 0x0000 ; zero out segments
         mov es, ax
-        mov ds, ax
+        mov ds, ax ; hi :)
         mov ss, ax
 
         in al, 0x92 ; enable A20 line
@@ -173,8 +173,16 @@ pitch dw 0
 times 510 - ($ - $$) db 0
 dw 0xAA55
 ; starts at 7E00
+; 16 BIT SECTION END --
+
+
+
+
+ 
+; 32 BIT SECTION START --
 [bits 32]
 %include "macros.inc"
+
 
 %macro NOERROR 1
 isr%1:
@@ -273,7 +281,7 @@ picmap:
         mov eax, 16
         mov esi, testmessage
         add eax, ebx
-        mov ebx, 0x0780
+        mov ebx, 0x001F
         ;mov [currentoffset], eax
         call printstring
 
@@ -285,12 +293,12 @@ picmap:
         out dx, al ; reset floppy reader. 
 
         mov esi, idtupmsg
-        mov ebx, 0x0780
+        mov ebx, 0x001F
         mov eax, [initoffset]
         call printstring
 
         mov esi, cmdprmpt
-        mov ebx, 0x0780
+        mov ebx, 0x001F
         mov eax, [initoffset]
         call printstring
         
@@ -357,11 +365,6 @@ isr_stub:
         %error "Guess who messed up the IDT stubs? You did! :)"
 %endif
 
-keyboard_handler: ; keyboard int handler
-        in al, 0x60
-        
-        ret
-        
 
 default_handler:
         pushfd
@@ -514,7 +517,7 @@ gpfaultmsg db "General Protection Fault", 0x0D, 0x0A, 0x00
 pagefaultmsg db "Page fault", 0x0D, 0x0A, 0x00
 fpuerrormsg db "FPU Error", 0x0D, 0x0A, 0x00
 alignfaultmsg db "Alignment Fault", 0x0D, 0x0A, 0x00
-machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Yer' messed", 0x0D, 0x0A, 0x00
+machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Have fun :)", 0x0D, 0x0A, 0x00
 simdfaultmsg db "SIMD fault", 0x0D, 0x0A, 0x00
 
          
@@ -531,6 +534,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, fra
         movzx eax, byte [printarguments + 4]
         mov ebx, dword [printarguments]
         sub al, 0x20
+.pitchedmaybe:
         mov edi, [framebuffer]
         shl eax, 2
         add edi, ebx
@@ -574,7 +578,14 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, fra
         mov word [edi + edx*2], bx
         pop ebx
         jmp .printed        
-        
+
+.addpitching:
+        push edx
+        movzx edx, word [pitch]
+        shl edx, 16
+        add edi, edx
+        pop edx
+        jmp .pitchedmaybe
 printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. Supports 0x0A and 0x0D.
         pushad
         mov dword [printarguments], eax
@@ -609,26 +620,51 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         add dword [printarguments], ecx
         add dword [initoffset], ecx
         jmp .loop
-
 .endprint:
         popad
         ret
-        
-        
-errorcodes dd 0 ; jmp over
+
+keyboard_handler:
+        in al, 0x60
+        cmp al, 128
+        jae skipkeyboard
+        movzx eax, al
+        ; cursor movement
+        movzx eax, byte [chartab + eax]
+        cmp al, 0x1C
+        je skipperkb        
+        mov byte [printarguments + 4], al
+        call printchar
+        add dword [printarguments], 32
+        skipkeyboard:
+        mov al, 0x20
+        out 0x20, al
+        ret        
+        chartab db 0x00, 0x00, "1234567890-=", 0x00, 0x00, "qwertyuiop[]", 0x00, 0x00, "asdfghjkl;'`", 0x00, "\zxcvbnm,./", 0x00, 0x20
+        chartabshift db 0x00, 0x00, "!@#$%^&*()_+", 0x00, 0x00, "QWERTYUIOP{}", 0x00, 0x00, 'ASDFGHKL:"~', 0x00, "|ZXCVBNM<>?", 0x00, 0x20
+        skipperkb:
+        mov esi, newliner
+        mov ebx, 0xFFFF
+        call printstring
+        jmp skipkeyboard
+
+        errorcodes dd 0 ; jmp over
 printarguments: ; qword
         dd 0 ; offset
         db 0 ; ASCII code
         dw 0 ; color
         db 0 ; padding / counter
 
+
+
 CHARSHEET
+newliner db 0x0D, 0x0A, 0x00
 hexlut db "0123456789ABCDEF"
 testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
 divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
 idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
 ioflags db 0
-cmdprmpt db 0x0D, 0x0A, "> this is a commmand!", 0x0D, 0x0A, 0x00
+cmdprmpt db 0x0D, 0x0A, "> ", 0x00
 
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
