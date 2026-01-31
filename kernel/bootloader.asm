@@ -261,7 +261,13 @@ picmap:
         xor al, al
         out 0x21, al
         out 0xA1, al
-
+        ; set timer frequency
+        mov al, 36
+        out 0x43, al
+        mov ax, 0x2E9B
+        out 0x40, al
+        mov al, ah
+        out 0x40, al
         movzx eax, word [pitch]
         shl eax, 8
         add eax, 16
@@ -398,8 +404,11 @@ handlers:
         dd timer_handler
         dd keyboard_handler
         times 14 dd NULLFAULT
+
 timer_handler:
-ret
+        add dword [clocktimer], 1
+        adc dword [clocktimer + 4], 0
+        ret
 
 DivZero:
         mov edi, [framebuffer]
@@ -656,7 +665,6 @@ printarguments: ; qword
         db 0 ; padding / counter
 
 
-
 CHARSHEET
 newliner db 0x0D, 0x0A, 0x00
 hexlut db "0123456789ABCDEF"
@@ -665,7 +673,7 @@ divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
 idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
 ioflags db 0
 cmdprmpt db 0x0D, 0x0A, "> ", 0x00
-
+clocktimer dq 0
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
 initoffset resd 1
