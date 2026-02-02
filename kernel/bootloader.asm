@@ -24,37 +24,40 @@ _start:
         test al, al
         jnz .printstack
 
-        mov ax, 0x4F01
+        mov ax, 0 ; zero out ES
+        mov es, ax
+
+        mov ax, 0x4F01 ; Set up VESA
         mov cx, 0x114
         mov di, 0x1000
         int 0x10
         cmp ax, 0x004F
         jne vesa_fail
 
-        mov ax, 0x4F02
+        mov ax, 0x4F02 ; Change mode to VESA
         mov bx, 0x4114
         int 0x10
         cmp ax, 0x004F
         jne vesa_failtwo
         
-        mov eax, [0x1028]
+        mov eax, [0x1028] ; store VESA details
         mov [framebuffer], eax
         mov bx, [0x1010]
         mov [pitch], bx
                 
-        xor ax, ax
+        xor ax, ax ; zero out DS
         mov ds, ax
         
-        xor ax, ax
+        xor ax, ax ; Get type of boot medium and prepare to read sectors
         mov dl, [bootdrive]
         int 0x13
-        cmp [bootdrive], 0x80
+        cmp byte [bootdrive], 0x80
         jae .hdd
 
-        xor ax, ax
+        xor ax, ax ; zero out ax and prepare floppy
         int 0x13
         
-        mov ah, 0x02
+        mov ah, 0x02 ; read 30 sectors
         mov al, 30
         xor ch, ch
         xor dh, dh
@@ -67,13 +70,13 @@ _start:
         jc floppyfail
         jmp .ramloaded
 .hdd:
-        mov ah, 0x42
+        mov ah, 0x42 ; read from HDD
         mov dl, [bootdrive]
         mov si, disk_packet
         int 0x13
         jc diskfail
         
-.ramloaded:
+.ramloaded: ; Load Global Descriptor Table
         cli ; this is it, boys
         lgdt [gdt_descriptor]
         mov eax, cr0
@@ -82,7 +85,7 @@ _start:
         jmp 0x08:0x7E00
 
 halting:
-        mov si, genfail
+        mov si, genfail ; print general failure message and halt
         mov ah, 0x0E
 .looped:
         lodsb
@@ -93,7 +96,7 @@ halting:
         jmp $
 
 
-floppyfail:
+floppyfail: ; floppy read failure and halt
         mov ah, 0x0E
         mov si, flop
 .floploop:
@@ -102,7 +105,7 @@ floppyfail:
         test al, al
         jnz .floploop
         jmp halting
-diskfail:
+diskfail: ; disk read failure and halt
         mov ah, 0x0E
         mov si, disk
 .diskloop:
@@ -112,7 +115,7 @@ diskfail:
         jnz .diskloop
         jmp halting
 
-vesa_fail:
+vesa_fail: ; vesa fail and halt
         mov ax, 0x0E
         mov si, vfail
 .failit:
@@ -123,7 +126,7 @@ vesa_fail:
         hlt
         jmp $
 
-vesa_failtwo:
+vesa_failtwo: ; vesa modeswitch fail and halt
         mov ax, 0x0E
         mov si, othervfail
 .failtwo:
@@ -215,14 +218,14 @@ isr%1:
         jmp $
 %endmacro
 
-  stagetwostart:
+  stagetwostart: ; set segments
         mov ax, 0x10
         mov ss, ax
         mov ds, ax
         mov es, ax
         mov gs, ax
         mov fs, ax
-        mov esp, 0x08000000
+        mov esp, 0x08000000 ; stack at 128 MB
         and esp, 0xFFFFFFF0
         mov ebp, esp
         
@@ -230,7 +233,7 @@ isr%1:
         mov esi, isr_stub
         mov ecx, 256 ; for now. 256 later. 
 .idtloop:
-        mov eax, [esi]
+        mov eax, [esi] ; generate IDT
         mov [edi], ax
         mov word [edi + 2], 0x08
         mov word [edi + 4], 0x00
@@ -243,7 +246,7 @@ isr%1:
 
         lidt [idt_descriptor]
 
-picmap:
+picmap: ; remap PIC
         mov al, 0x11
         out 0x20, al
         out 0xA0, al
@@ -277,16 +280,15 @@ picmap:
 
         cld
         mov al, 0x20
-.loopeding:
        
         movzx ebx, word [pitch]
         shl ebx, 4
         sti
 
-        call clearscreen
+        call clearscreen ; clear screen
         
         
-        mov eax, 16
+        mov eax, 16 ; print diagnostic messages
         mov esi, testmessage
         add eax, ebx
         mov ebx, 0x0F80
@@ -305,10 +307,14 @@ picmap:
         mov eax, [initoffset]
         call printstring
 
-        mov esi, cmdprmpt
+        call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
+        
+
+        mov esi, cmdprmpt ; print cmdprmpt icon
         mov ebx, 0x0F80
         mov eax, [initoffset]
         call printstring
+        add dword [initoffset], 16
         
         hlt
         jmp $
@@ -410,7 +416,7 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
-        call printscreen ; GET RID OF THIS LATER
+        ;call printscreen ; GET RID OF THIS LATER
         ret
 
 DivZero:
@@ -591,14 +597,9 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, fra
         pop ebx
         jmp .printed        
 
-.addpitching:
-        push edx
-        movzx edx, word [pitch]
-        shl edx, 16
-        add edi, edx
-        pop edx
-        jmp .pitchedmaybe
 printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. Supports 0x0A and 0x0D.
+        pushfd
+        cli
         pushad
         mov dword [printarguments], eax
         cld
@@ -634,6 +635,7 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         jmp .loop
 .endprint:
         popad
+        popfd
         ret
 
 keyboard_handler:
@@ -665,6 +667,7 @@ semishifted:
 
         mov al, 0x20 ; Send EOI
         out 0x20, al
+        call printscreen ; print characters. We'll see how this goes. 
         ret        
         chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
         chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
