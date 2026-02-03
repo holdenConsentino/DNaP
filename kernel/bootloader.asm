@@ -285,7 +285,7 @@ picmap: ; remap PIC
         shl ebx, 4
         sti
 
-        call clearscreen ; clear screen
+        ;call clearscreen ; clear screen
         
         
         mov eax, 16 ; print diagnostic messages
@@ -309,12 +309,11 @@ picmap: ; remap PIC
 
         call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
         
-
         mov esi, cmdprmpt ; print cmdprmpt icon
-        mov ebx, 0x0F80
+        mov ebx, 0x0
         mov eax, [initoffset]
         call printstring
-        add dword [initoffset], 16
+        add dword [initoffset], 32
         
         hlt
         jmp $
@@ -416,7 +415,7 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
-        ;call printscreen ; GET RID OF THIS LATER
+        call printscreen ; GET RID OF THIS LATER
         ret
 
 DivZero:
@@ -593,7 +592,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, fra
 .printpix:
         push ebx
         mov bx, word [printarguments + 5]
-        mov word [edi + edx*2], bx
+        mov word [edi + edx*2], 0xFFFF ;bx
         pop ebx
         jmp .printed        
 
@@ -614,6 +613,8 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         je .cr
         cmp al, 0x0A
         je .newline
+        cmp al, 0x20
+        je .space
         mov byte [printarguments + 4], al
         call printchar
         add dword [printarguments], 32
@@ -633,6 +634,10 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         add dword [printarguments], ecx
         add dword [initoffset], ecx
         jmp .loop
+.space:
+        add dword [printarguments], 32
+        ;inc esi ; ????
+        jmp .loop
 .endprint:
         popad
         popfd
@@ -646,11 +651,13 @@ keyboard_handler:
         je shift
         cmp al, 0x36
         je shift
+
+        cmp al, 0x1C
+        je skipperkb ; cmp to ENTER
         movzx eax, al
         ; cursor movement
         movzx eax, byte [chartab + eax]
-        cmp al, 0x1C
-        je skipperkb ; cmp to ENTER
+ 
 possiblyshifted:
         push ebx
         mov ebx, [newringoffset]
@@ -659,42 +666,41 @@ possiblyshifted:
         mov byte [keyboardringbuffer + ebx + 1], 0
         pop ebx
 skipkeyboard:
-        ;cmp al, 0xAA
-        ;je .unshift
-        ;cmp al, 0xB6
-        ;je .unshift
-semishifted:
 
         mov al, 0x20 ; Send EOI
         out 0x20, al
-        call printscreen ; print characters. We'll see how this goes. 
+        mov word [printarguments + 5], 0xFFFF
+        ;call printscreen ; print characters. We'll see how this goes.
         ret        
         chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
         chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
         skipperkb:
-        mov esi, newliner
-        mov ebx, 0xFFFF
-        call printstring
+        
         jmp skipkeyboard
 
-        shift:
+        shift: ; this has some problems
+        in al, 0x60
         movzx eax, al
         movzx eax, byte [chartabshift + eax]
-        jmp possiblyshifted
-        
-        
+        push ebx
+        mov ebx, [newringoffset]
+        mov byte [keyboardringbuffer + ebx], al
+        inc dword [newringoffset]
+        mov byte [keyboardringbuffer + ebx + 1], 0
+        pop ebx
+
 clearscreen:
         pushfd
         cli
         pushad
         mov edi, [framebuffer]
         mov ecx, (600 * 800) / 2
-        mov eax, 0
+        mov eax, 0x00000000
         rep stosd
         mov dword [newringoffset], 0
         mov dword [endoffset], 0
         mov byte [keyboardringbuffer + 1961], 0
-        mov byte [initoffset], 0
+        mov dword [initoffset], 0
         popad
         popfd
         ret
@@ -703,7 +709,7 @@ printscreen:
         pushad
         mov esi, keyboardringbuffer
         mov eax, [initoffset]
-        mov ebx, 0x0F80
+        ;mov ebx, 0x0F80
         call printstring
         popad
         ret
@@ -717,7 +723,7 @@ printarguments: ; qword
 
 
 CHARSHEET
-newliner db 0x0D, 0x0A, 0x00
+newlinermsg db " ", 0x0D, 0x0A, 0x00
 hexlut db "0123456789ABCDEF"
 testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
 divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
