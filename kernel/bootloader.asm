@@ -425,7 +425,7 @@ DivZero:
         rep stosd
         mov esi, divzeromsg
         xor eax, eax
-        mov ebx, 0xFFFF
+        mov ebx, 0xF800
         call printstring
         hlt
         jmp $ ; CHANGE THIS LATER
@@ -436,7 +436,7 @@ SingleStep:
         rep stosd
         mov esi, singlestepmsg
         xor eax, eax
-        mov ebx, 0xFFFF
+        mov ebx, 0xF800
         call printstring
         hlt
         jmp $
@@ -448,7 +448,7 @@ HardwareFailure:
         rep stosd
         mov esi, hardwarefailuremsg
         xor eax, eax
-        mov ebx, 0xFFFF
+        mov ebx, 0xF800
         call printstring
         hlt
         jmp $
@@ -462,64 +462,64 @@ OverFlow:
         rep stosd
         mov esi, overflowmsg
         xor eax, eax
-        mov ebx, 0xFFFF
+        mov ebx, 0xF800
         call printstring
         hlt
         jmp $
 
 ExceedsBounds:
         SCREENFILL 0x000;00000
-        PRINTMSG exceedsboundsmsg, 0, 0xFFFF
+        PRINTMSG exceedsboundsmsg, 0, 0xF800
         hlt
         jmp $
 
 InvalidOpcode:
         SCREENFILL 0x0000;0000
-        PRINTMSG invalidopcodemsg, 0, 0xFFFF
+        PRINTMSG invalidopcodemsg, 0, 0xF800
         TERMINATE
 DevNotAvail:
         SCREENFILL 0x00000000
-        PRINTMSG devnotavailmsg, 0, 0xFFFF
+        PRINTMSG devnotavailmsg, 0, 0xF800
         TERMINATE
 DoubleFault:
         SCREENFILL 0x00000000
-        PRINTMSG doublefaultmsg, 0, 0xFFFF
+        PRINTMSG doublefaultmsg, 0, 0xF800
         ret ; yes, going back
 TSSCorrupt:
         SCREENFILL 0x00000000
-        PRINTMSG tsscorruptmsg, 0, 0xFFFF
+        PRINTMSG tsscorruptmsg, 0, 0xF800
         TERMINATE
 InvalidSegment:
         SCREENFILL 0x00000000
-        PRINTMSG invsegmsg, 0, 0xFFFF
+        PRINTMSG invsegmsg, 0, 0xF800
         TERMINATE
 StackFault:
         SCREENFILL 0x00000000
-        PRINTMSG stackfaultmsg, 0, 0xFFFF
+        PRINTMSG stackfaultmsg, 0, 0xF800
         TERMINATE
 GPFault:
         SCREENFILL 0x00000000
-        PRINTMSG gpfaultmsg, 0, 0xFFFF
+        PRINTMSG gpfaultmsg, 0, 0xF800
         TERMINATE
 Page:
         SCREENFILL 0x00000000
-        PRINTMSG pagefaultmsg, 0, 0xFFFF
+        PRINTMSG pagefaultmsg, 0, 0xF800
         ret ; I don't yet have paging so who gives a care
 FPUError:
         SCREENFILL 0x00000000
-        PRINTMSG fpuerrormsg, 0, 0xFFFF
+        PRINTMSG fpuerrormsg, 0, 0xF800
         ret
 AlignFault:
         SCREENFILL 0x00000000
-        PRINTMSG alignfaultmsg, 0, 0xFFFF
+        PRINTMSG alignfaultmsg, 0, 0xF800
         ret
 MachineFault:
         SCREENFILL 0x00000000
-        PRINTMSG machinefaultmsg, 0, 0xFFFF
+        PRINTMSG machinefaultmsg, 0, 0xF800
         TERMINATE
 SimdFault:
         SCREENFILL 0x00000000
-        PRINTMSG simdfaultmsg, 0, 0xFFFF
+        PRINTMSG simdfaultmsg, 0, 0xF800
         ret
 NULLFAULT:
         ret
@@ -645,15 +645,22 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
 
 keyboard_handler:
         in al, 0x60
+        cmp al, 0xAA
+        je unshift
+        cmp al, 0xB6
+        je unshift
         cmp al, 0x80
         jae skipkeyboard
         cmp al, 0x2A
         je shift
         cmp al, 0x36
         je shift
-
+        cmp al, 0x0E
+        je backspace
         cmp al, 0x1C
         je skipperkb ; cmp to ENTER
+        cmp byte [iscapitol], 0
+        jnz uppercase
         movzx eax, al
         ; cursor movement
         movzx eax, byte [chartab + eax]
@@ -671,15 +678,23 @@ skipkeyboard:
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
         ;call printscreen ; print characters. We'll see how this goes.
-        ret        
-        chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
-        chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
+        ret
         skipperkb:
-        
+        mov ecx, [endoffset]
+        mov [newringoffset], ecx
+        mov edx, [initoffset]
+        movzx ecx, word [pitch]
+        shl ecx, 4
+        add edx, ecx
+        movzx ecx, word [pitch]
+        shl ecx, 1
+        add edx, ecx
+        mov [initoffset], edx
+        mov [endoffset - 1], 0
         jmp skipkeyboard
 
-        shift: ; this has some problems
-        in al, 0x60
+uppercase:
+        
         movzx eax, al
         movzx eax, byte [chartabshift + eax]
         push ebx
@@ -688,7 +703,25 @@ skipkeyboard:
         inc dword [newringoffset]
         mov byte [keyboardringbuffer + ebx + 1], 0
         pop ebx
+        jmp skipkeyboard
 
+shift: ; this has some problems
+        mov [iscapitol], 1
+        jmp skipkeyboard
+
+unshift:
+        mov [iscapitol], 0
+        jmp skipkeyboard
+backspace:
+        mov ecx, [endoffset]
+        mov byte [keyboardringbuffer + ecx - 1], 0x00
+        ; DO TRHiS
+        mov byte [printarguments + 4], 0x20
+        sub dword [printarguments], 32
+        call printchar
+        add dword [printarguments], 32
+        jmp skipkeyboard
+        
 clearscreen:
         pushfd
         cli
@@ -708,7 +741,7 @@ clearscreen:
 printscreen:
         pushad
         mov esi, keyboardringbuffer
-        mov eax, [initoffset]
+        mov eax, [initoffset] ; ???? initoffset?
         ;mov ebx, 0x0F80
         call printstring
         popad
@@ -731,6 +764,11 @@ idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
 ioflags db 0
 cmdprmpt db 0x0D, 0x0A, "> ", 0x00
 clocktimer dq 0
+align 4
+chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
+chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHJKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
+
+
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
 initoffset resd 1
@@ -738,3 +776,5 @@ currentoffset resd 1
 keyboardringbuffer resb 1962
 newringoffset resd 1
 endoffset resd 1
+cmdbuffer resb 32
+iscapitol resb 1
