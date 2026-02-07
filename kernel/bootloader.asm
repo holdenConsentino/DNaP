@@ -87,7 +87,7 @@ _start:
         jmp 0x08:0x7E00
         crdts db "DNaP, all rights reserved"
         crdts2 db "Definitely Not a Placeholder"
-        crdts3 db "also Do Not apply Physics; Debug Nothing assume Perfection; Develop Nothing, apply Physics; Do Nuke all Processes"
+        crdts3 db "also Do Not apply Physics; Debug Nothing assume Perfection; Develop Nothing, apply Physics; Do Nuke all Processes; Daring Narnian anti-Pangolins"
         
 halting:
         mov si, genfail ; print general failure message and halt
@@ -710,11 +710,11 @@ uppercase:
         jmp skipkeyboard
 
 shift: ; this has some problems
-        mov [iscapitol], 1
+        mov byte [iscapitol], 1
         jmp skipkeyboard
 
 unshift:
-        mov [iscapitol], 0
+        mov byte [iscapitol], 0
         jmp skipkeyboard
 backspace:
         push edi
