@@ -311,7 +311,7 @@ picmap: ; remap PIC
         
         mov esi, cmdprmpt ; print cmdprmpt icon
         mov ebx, 0x0
-        mov eax, [initoffset]
+        mov eax, 0
         call printstring
         add dword [initoffset], 32
         
@@ -415,7 +415,7 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
-        call printscreen ; GET RID OF THIS LATER
+        ;call printscreen ; GET RID OF THIS LATER
         ret
 
 DivZero:
@@ -643,6 +643,8 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         popfd
         ret
 
+times 16 db 0
+
 keyboard_handler:
         in al, 0x60
         cmp al, 0xAA
@@ -667,9 +669,9 @@ keyboard_handler:
  
 possiblyshifted:
         push ebx
-        mov ebx, [newringoffset]
+        mov ebx, [newringoffset] ; newringoffset
         mov byte [keyboardringbuffer + ebx], al
-        inc dword [newringoffset]
+        inc dword [newringoffset] ; newringoffset
         mov byte [keyboardringbuffer + ebx + 1], 0
         pop ebx
 skipkeyboard:
@@ -677,30 +679,27 @@ skipkeyboard:
         mov al, 0x20 ; Send EOI
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
-        ;call printscreen ; print characters. We'll see how this goes.
+        call printscreen ; print characters. We'll see how this goes.
         ret
-        skipperkb:
-        mov ecx, [endoffset]
-        mov [newringoffset], ecx
-        mov edx, [initoffset]
-        movzx ecx, word [pitch]
-        shl ecx, 4
-        add edx, ecx
-        movzx ecx, word [pitch]
-        shl ecx, 1
-        add edx, ecx
-        mov [initoffset], edx
-        mov [endoffset - 1], 0
-        jmp skipkeyboard
+skipperkb:
+        mov ebx, [newringoffset] ; newringoffset
+	mov byte [keyboardringbuffer + ebx], 0x0D
+	mov byte [keyboardringbuffer + ebx + 1], 0x0A
+	mov byte [keyboardringbuffer + ebx + 2], 0x00
+	add dword [newringoffset], 2
+        mov al, 0x20
+        out 0x20, al
+        call printscreen
+        ret
 
 uppercase:
         
         movzx eax, al
         movzx eax, byte [chartabshift + eax]
         push ebx
-        mov ebx, [newringoffset]
+        mov ebx, [newringoffset] ; newringoffset
         mov byte [keyboardringbuffer + ebx], al
-        inc dword [newringoffset]
+        inc dword [newringoffset] ; newringoffset
         mov byte [keyboardringbuffer + ebx + 1], 0
         pop ebx
         jmp skipkeyboard
@@ -713,12 +712,17 @@ unshift:
         mov [iscapitol], 0
         jmp skipkeyboard
 backspace:
-        mov ecx, [endoffset]
+        mov ecx, [newringoffset] ; endoffset
         mov byte [keyboardringbuffer + ecx - 1], 0x00
         ; DO TRHiS
+        push edi
+        mov edi, [framebuffer]
         mov byte [printarguments + 4], 0x20
-        sub dword [printarguments], 32
+        sub dword [printarguments], 64
         call printchar
+        mov edi, [framebuffer] ; TEMP
+        mov dword [edi], 0xF800F800 ; TEMP
+        pop edi
         add dword [printarguments], 32
         jmp skipkeyboard
         
@@ -741,9 +745,12 @@ clearscreen:
 printscreen:
         pushad
         mov esi, keyboardringbuffer
-        mov eax, [initoffset] ; ???? initoffset?
-        ;mov ebx, 0x0F80
+        ;mov eax, [initoffset] ; ???? initoffset?
+        add esi, [endoffset] ; TEMP
+        mov ebx, 0x0F80
         call printstring
+        mov edi, [endoffset]
+        mov [initoffset], edi ; TEMP
         popad
         ret
 
@@ -762,7 +769,7 @@ testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED 
 divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
 idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
 ioflags db 0
-cmdprmpt db 0x0D, 0x0A, "> ", 0x00
+cmdprmpt db "> ", 0x00
 clocktimer dq 0
 align 4
 chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
