@@ -721,7 +721,7 @@ backspace:
         mov ecx, [newringoffset] ; endoffset
         mov byte [keyboardringbuffer + ecx - 1], 0x21
         ;sub [newringoffset], 32
-        dec [newringoffset]
+        dec dword [newringoffset]
         sub dword [printarguments], 32
         mov edi, [framebuffer]
         mov ebx, [printarguments]
