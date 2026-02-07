@@ -1,5 +1,7 @@
 ;Good luck 
 
+
+
 org 0x7C00
 [bits 16]
 
@@ -83,7 +85,10 @@ _start:
         or eax, 0x1
         mov cr0, eax                
         jmp 0x08:0x7E00
-
+        crdts db "DNaP, all rights reserved"
+        crdts2 db "Definitely Not a Placeholder"
+        crdts3 db "also Do Not apply Physics; Debug Nothing assume Perfection; Develop Nothing, apply Physics; Do Nuke all Processes"
+        
 halting:
         mov si, genfail ; print general failure message and halt
         mov ah, 0x0E
@@ -613,8 +618,8 @@ printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. S
         je .cr
         cmp al, 0x0A
         je .newline
-        cmp al, 0x20
-        je .space
+        ;cmp al, 0x20
+        ;je .space
         mov byte [printarguments + 4], al
         call printchar
         add dword [printarguments], 32
@@ -712,19 +717,32 @@ unshift:
         mov [iscapitol], 0
         jmp skipkeyboard
 backspace:
-        mov ecx, [newringoffset] ; endoffset
-        mov byte [keyboardringbuffer + ecx - 1], 0x00
-        ; DO TRHiS
         push edi
+        mov ecx, [newringoffset] ; endoffset
+        mov byte [keyboardringbuffer + ecx - 1], 0x21
+        ;sub [newringoffset], 32
+        dec [newringoffset]
+        sub dword [printarguments], 32
         mov edi, [framebuffer]
-        mov byte [printarguments + 4], 0x20
-        sub dword [printarguments], 64
-        call printchar
-        mov edi, [framebuffer] ; TEMP
-        mov dword [edi], 0xF800F800 ; TEMP
+        mov ebx, [printarguments]
+        xor edx, edx
+        add edi, ebx
+.backouterloop:
+        xor ecx, ecx
+.backinnerloop:
+        mov dword [edi + ecx * 2], 0x0000
+        inc ecx
+        cmp ecx, 16
+        jle .backinnerloop
+        movzx ebx, word [pitch]
+        inc edx
+        add edi, ebx
+        cmp edx, 16
+        jle .backouterloop
         pop edi
-        add dword [printarguments], 32
-        jmp skipkeyboard
+        mov al, 0x20
+        out 0x20, al
+        ret        
         
 clearscreen:
         pushfd
