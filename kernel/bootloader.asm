@@ -85,10 +85,7 @@ _start:
         or eax, 0x1
         mov cr0, eax                
         jmp 0x08:0x7E00
-        crdts db "DNaP, all rights reserved"
-        crdts2 db "Definitely Not a Placeholder"
-        crdts3 db "also Do Not apply Physics; Debug Nothing assume Perfection; Develop Nothing, apply Physics; Do Nuke all Processes; Daring Narnian anti-Pangolins"
-        
+
 halting:
         mov si, genfail ; print general failure message and halt
         mov ah, 0x0E
@@ -718,11 +715,11 @@ unshift:
         jmp skipkeyboard
 backspace:
         push edi
-        mov ecx, [newringoffset] ; endoffset
-        mov byte [keyboardringbuffer + ecx - 1], 0x21
+        mov ecx, [newringoffset] ; endoffset 
+        mov byte [keyboardringbuffer + ecx  - 1], 0x20 ; overwrite previous byte of kbringbuffer
         ;sub [newringoffset], 32
-        dec dword [newringoffset]
-        sub dword [printarguments], 32
+        dec dword [newringoffset] ; mov newringoffset back one
+        sub dword [printarguments], 32 ; no idea
         mov edi, [framebuffer]
         mov ebx, [printarguments]
         xor edx, edx
@@ -803,3 +800,4 @@ newringoffset resd 1
 endoffset resd 1
 cmdbuffer resb 32
 iscapitol resb 1
+ 
