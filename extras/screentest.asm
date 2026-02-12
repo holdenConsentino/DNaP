@@ -311,6 +311,21 @@ picmap: ; remap PIC
 
         call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
         
+        mov esi, cmdprmpt ; print cmdprmpt icon
+        mov ebx, 0x0
+        mov eax, 0
+        call printstring
+        add dword [initoffset], 32
+
+        call clearscreen
+        mov edi, [framebuffer]
+        xor ax, ax
+        mov ecx, (800 * 600)
+screenloop:
+        mov word [edi], ax
+        inc ax
+        add edi, 2
+        loop screenloop
         
         hlt
         jmp $
@@ -658,8 +673,6 @@ keyboard_handler:
         je backspace
         cmp al, 0x1C
         je skipperkb ; cmp to ENTER
-        ;cmp al, 0xE0
-        ;je extension
         cmp byte [iscapitol], 0
         jnz uppercase
         movzx eax, al
@@ -689,7 +702,6 @@ skipperkb:
         mov al, 0x20
         out 0x20, al
         call printscreen
-        call cmd
         ret
 
 uppercase:
@@ -703,11 +715,6 @@ uppercase:
         mov byte [keyboardringbuffer + ebx + 1], 0
         pop ebx
         jmp skipkeyboard
-
-extension:
-        ; TEMP SO INCREDIBLY TEMP
-        in al, 0x60
-        cmp al, 0
 
 shift: ; this has some problems
         mov byte [iscapitol], 1
@@ -756,27 +763,12 @@ clearscreen:
         mov dword [endoffset], 0
         mov byte [keyboardringbuffer + 1961], 0
         mov dword [initoffset], 0
-
-        mov edi, keyboardringbuffer
-        mov ecx, 1962
-        mov eax, 0x00
-        rep stosb
-
-        mov esi, cmdprmpt ; print cmdprmpt icon
-        mov ebx, 0xF800
-        mov eax, 0
-        call printstring
-        add dword [initoffset], 32
-        
         popad
         popfd
         ret
 
 printscreen:
         pushad
-
-        
-        
         mov esi, keyboardringbuffer
         ;mov eax, [initoffset] ; ???? initoffset?
         add esi, [endoffset] ; TEMP
@@ -794,20 +786,6 @@ printarguments: ; qword
         dw 0 ; color
         db 0 ; padding / counter
 
-
-cmd:
-        pushad
-        mov eax, [newringoffset]
-        ;mov ebx, [endoffset]
-        mov al, byte [keyboardringbuffer + eax - 3]
-        cmp al, "c"
-        je .clear
-        popad
-        ret
-.clear:
-        call clearscreen
-        popad
-        ret
 
 CHARSHEET
 newlinermsg db " ", 0x0D, 0x0A, 0x00
