@@ -1,5 +1,5 @@
 ;Good luck 
-
+; EAX return ; EBX ECX EDX STACK args ; EDI ESI arrays/stringops ; EBP ESP don't even think about it ; EFLAGS NO ; EIP VERY NO
 
 
 org 0x7C00
