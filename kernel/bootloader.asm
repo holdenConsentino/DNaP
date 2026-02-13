@@ -376,6 +376,7 @@ isr_stub:
 %endif
 
 
+
 default_handler:
         pushfd
         cli
@@ -405,9 +406,28 @@ default_handler:
 handlers:
         dd DivZero, SingleStep, HardwareFailure, BreakPoint, OverFlow, ExceedsBounds, InvalidOpcode, DevNotAvail, DoubleFault, NULLFAULT, TSSCorrupt, InvalidSegment, StackFault, GPFault, Page, NULLFAULT, FPUError, AlignFault, MachineFault, SimdFault
         times 12 dd NULLFAULT ; 11
-        dd timer_handler
-        dd keyboard_handler
+        dd timer_handler ; 32
+        dd keyboard_handler ; 33
+        dd int_write ; 34
         times 14 dd NULLFAULT
+
+int_write:
+        ; honestly probably just going to see about writing this to the keyboardringbuffer and calling printscreen instsead.
+        ; string in esi, length in ecx
+        ; clobbers newringoffset, keyboardringbuffer, edi, ecx
+        ; spinlock :)
+        bt byte [writeactiveflag], 0
+        jc .int_write
+        bts byte [writeactiveflag], 0
+        mov edi, keyboardringbuffer
+        add edi, dword [newringoffset]
+        rep movsb
+        add dword [newringoffset], ecx
+        mov ecx, [newringoffset]
+        mov dword [endoffset], ecx
+        call printscreen
+        btr byte [writeactiveflag], 0
+        ret
 
 timer_handler:
         add dword [clocktimer], 1
@@ -797,17 +817,46 @@ printarguments: ; qword
 
 cmd:
         pushad
-        mov eax, [newringoffset]
-        ;mov ebx, [endoffset]
-        mov al, byte [keyboardringbuffer + eax - 3]
-        cmp al, "c"
+        push edi
+        mov edi, cmdbuffer
+        mov eax, 0
+        mov ecx, 8
+        rep stosw
+        mov esi, keyboardringbuffer
+        mov ecx, [newringoffset]
+        mov ebx, [endoffset]
+        add esi, ebx
+        sub ecx, ebx
+        mov edi, cmdbuffer
+        rep movsb
+
+        mov esi, cmdbuffer
+        pop edi
+        cmp dword [esi], "clrs"
         je .clear
+        cmp dword [esi], "lsdc"
+        je .dir
+        cmp dword [esi], "chwd"
+        je .changedir
+        mov esi, invalidcmd
+        call printstring        
         popad
         ret
 .clear:
         call clearscreen
         popad
         ret
+.dir:
+        mov esi, dirtest
+        call printstring
+        popad
+        ret
+.changedir:
+        mov esi, cdtest
+        call printstring
+        popad
+        ret
+        
 
 CHARSHEET
 newlinermsg db " ", 0x0D, 0x0A, 0x00
@@ -818,6 +867,11 @@ idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
 ioflags db 0
 cmdprmpt db "> ", 0x00
 clocktimer dq 0
+invalidcmd db "Invalid Command :(", 0x0A, 0x0D, "> ", 0x00
+dirtest db "Files? What files?", 0x0D, 0x0A, "> ", 0x00
+cdtest db "No other directories. Please add %dir command.", 0x0D, 0x0A, "> ", 0x00
+writeactiveflag db 0 ; 0 print; 1 write; 2 read; 3 open; 4 close; 5 inc; 6 dec; 7 access;
+
 align 4
 chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
 chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHJKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
@@ -832,4 +886,4 @@ newringoffset resd 1
 endoffset resd 1
 cmdbuffer resb 32
 iscapitol resb 1
- 
+
