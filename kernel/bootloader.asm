@@ -310,7 +310,10 @@ picmap: ; remap PIC
         call printstring
 
         call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
-        
+
+        mov esi, dirtest
+        mov ecx, dirtestlen
+        int 0x29
         
         hlt
         jmp $
@@ -406,28 +409,44 @@ default_handler:
 handlers:
         dd DivZero, SingleStep, HardwareFailure, BreakPoint, OverFlow, ExceedsBounds, InvalidOpcode, DevNotAvail, DoubleFault, NULLFAULT, TSSCorrupt, InvalidSegment, StackFault, GPFault, Page, NULLFAULT, FPUError, AlignFault, MachineFault, SimdFault
         times 12 dd NULLFAULT ; 11
-        dd timer_handler ; 32
-        dd keyboard_handler ; 33
-        dd int_write ; 34
-        times 14 dd NULLFAULT
+        dd timer_handler ; 0x20
+        dd keyboard_handler ; 0x21
+        times 7 dd NULLFAULT ;0x22-0x28
+        dd stdprint ; int 0x29
 
-int_write:
-        ; honestly probably just going to see about writing this to the keyboardringbuffer and calling printscreen instsead.
-        ; string in esi, length in ecx
-        ; clobbers newringoffset, keyboardringbuffer, edi, ecx
-        ; spinlock :)
-        bt byte [writeactiveflag], 0
-        jc .int_write
-        bts byte [writeactiveflag], 0
+stdprint:
+        ; Atomic wrapper for printstring. Asynchronous. Writes to charbuffer instead of screen, technically
+        ; ESI string ECX length (if ecx is -1), goes to null termination
+        bt [writeactiveflag], 0
+        jc stdprint
+        bts [writeactiveflag], 0
+        pushad
         mov edi, keyboardringbuffer
-        add edi, dword [newringoffset]
+        mov ebx, dword [newringoffset]
+        add edi, ebx
+        cmp ecx, 0xFFFFFFFF
+        je .nullterm
         rep movsb
-        add dword [newringoffset], ecx
-        mov ecx, [newringoffset]
-        mov dword [endoffset], ecx
+        add dword [newringoffset], ebx
         call printscreen
-        btr byte [writeactiveflag], 0
+        popad
+        btr [writeactiveflag], 0
         ret
+.nullterm:
+        mov al, byte [esi]
+        test al, al
+        jz .finish
+        inc esi
+        mov byte [edi], al
+        inc edi
+        inc dword [newringoffset]
+        jmp .nullterm
+.finish:
+        call printscreen
+        popad
+        btr [writeactiveflag], 0
+        ret
+        
 
 timer_handler:
         add dword [clocktimer], 1
@@ -709,7 +728,6 @@ skipperkb:
         mov al, 0x20
         out 0x20, al
         call printscreen
-        call cmd
         ret
 
 uppercase:
@@ -815,48 +833,6 @@ printarguments: ; qword
         db 0 ; padding / counter
 
 
-cmd:
-        pushad
-        push edi
-        mov edi, cmdbuffer
-        mov eax, 0
-        mov ecx, 8
-        rep stosw
-        mov esi, keyboardringbuffer
-        mov ecx, [newringoffset]
-        mov ebx, [endoffset]
-        add esi, ebx
-        sub ecx, ebx
-        mov edi, cmdbuffer
-        rep movsb
-
-        mov esi, cmdbuffer
-        pop edi
-        cmp dword [esi], "clrs"
-        je .clear
-        cmp dword [esi], "lsdc"
-        je .dir
-        cmp dword [esi], "chwd"
-        je .changedir
-        mov esi, invalidcmd
-        call printstring        
-        popad
-        ret
-.clear:
-        call clearscreen
-        popad
-        ret
-.dir:
-        mov esi, dirtest
-        call printstring
-        popad
-        ret
-.changedir:
-        mov esi, cdtest
-        call printstring
-        popad
-        ret
-        
 
 CHARSHEET
 newlinermsg db " ", 0x0D, 0x0A, 0x00
@@ -869,6 +845,7 @@ cmdprmpt db "> ", 0x00
 clocktimer dq 0
 invalidcmd db "Invalid Command :(", 0x0A, 0x0D, "> ", 0x00
 dirtest db "Files? What files?", 0x0D, 0x0A, "> ", 0x00
+dirtestlen equ $ - dirtest
 cdtest db "No other directories. Please add %dir command.", 0x0D, 0x0A, "> ", 0x00
 writeactiveflag db 0 ; 0 print; 1 write; 2 read; 3 open; 4 close; 5 inc; 6 dec; 7 access;
 
