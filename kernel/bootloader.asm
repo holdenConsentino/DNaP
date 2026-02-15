@@ -273,6 +273,38 @@ picmap: ; remap PIC
         out 0x40, al
         mov al, ah
         out 0x40, al
+
+
+        ; paging :)
+        mov edi, pagetables
+        mov ecx, 32768
+        xor eax, eax
+.pageloop:
+        mov edx, eax
+        or edx, 0x3
+        mov [edi], edx
+        add edi, 4
+        add eax, 4096
+        loop .pageloop
+
+        mov edi, pagedir
+        mov esi, pagetables
+        mov ecx, 32
+.pagelink:
+        mov eax, esi
+        or eax, 0x3
+        mov [edi], eax
+        add edi, 4
+        add esi, 4096
+        loop .pagelink
+
+        mov eax, pagedir
+        mov cr3, eax
+
+        mov eax, cr0
+        or eax, 0x80000000
+        mov cr0, eax
+        
         movzx eax, word [pitch]
         shl eax, 8
         add eax, 16
@@ -311,10 +343,7 @@ picmap: ; remap PIC
 
         call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
 
-        mov esi, dirtest
-        mov ecx, dirtestlen
-        int 0x29
-        
+         
         hlt
         jmp $
 
@@ -423,12 +452,15 @@ stdprint:
         pushad
         mov edi, keyboardringbuffer
         mov ebx, dword [newringoffset]
+        mov edx, dword [endoffset]
         add edi, ebx
         cmp ecx, 0xFFFFFFFF
         je .nullterm
         rep movsb
-        add dword [newringoffset], ebx
+        add dword [newringoffset], ecx
         call printscreen
+        mov edx, [newringoffset]
+        mov [endoffset], edx
         popad
         btr [writeactiveflag], 0
         ret
@@ -832,7 +864,50 @@ printarguments: ; qword
         dw 0 ; color
         db 0 ; padding / counter
 
+cmdparser:
+        pushad
+        test eax, eax
+        jnz .entered
+        cld
+        mov edi, cmdbuffer
+        xor eax, eax
+        mov ecx, 32
+        rep stosb
+        
+        
+        mov esi, keyboardringbuffer
+        mov ebx, [endoffset]
+        mov ecx, [newringoffset]
+        mov edi, cmdbuffer
+        add esi, ebx
+        sub ecx, ebx
+        rep movsb
 
+
+        
+        cmp word [cmdbuffer], "ls"
+        je .listcontents
+        cmp word [cmdbuffer], "cd"
+        je .changedir
+        cmp word [cmdbuffer], "mv"
+        je .movefile
+        cmp word [cmdbuffer], "rm"
+        je .delete
+        cmp word [cmdbuffer], "wx"
+        je .edit
+        cmp dword [cmdbuffer], "clrs"
+        je .clear
+        
+
+        movzx ecx, byte [cmdbuffer]
+        mov edi, cmdtable
+        ; do funciton table for ecx[table]
+        ; Damn this'll take a while to do. 
+        mov ecx, [esi + ecx * 4]
+        jmp ecx
+        
+        
+                 
 
 CHARSHEET
 newlinermsg db " ", 0x0D, 0x0A, 0x00
@@ -847,15 +922,26 @@ invalidcmd db "Invalid Command :(", 0x0A, 0x0D, "> ", 0x00
 dirtest db "Files? What files?", 0x0D, 0x0A, "> ", 0x00
 dirtestlen equ $ - dirtest
 cdtest db "No other directories. Please add %dir command.", 0x0D, 0x0A, "> ", 0x00
-writeactiveflag db 0 ; 0 print; 1 write; 2 read; 3 open; 4 close; 5 inc; 6 dec; 7 access;
+writeactiveflag db 0 ; 0 charbuffer; 1 direct FB; 2 read; 3 open; 4 close; 5 inc; 6 dec; 7 access;
 
 align 4
 chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
 chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHJKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
 
 
+align 4096
+pagedir times 1024 dd 0
+
+align 4096
+pagetables times (32 * 1024) db 0
+        
+
+
+
 section .bss
 scratchpad resq 1024 ; 8 KiB scratchpad
+filestat resq 256 ; 4KB scratchpad to hold file addresses, names, and sizes in RAM. Directories are files that hold extended addresses.
+                        ; 64 bit filename, 32 bit address, 16 bit size; 16 bit attributes. Can have 128 top-directories. 
 initoffset resd 1
 currentoffset resd 1
 keyboardringbuffer resb 1962
@@ -863,4 +949,3 @@ newringoffset resd 1
 endoffset resd 1
 cmdbuffer resb 32
 iscapitol resb 1
-
