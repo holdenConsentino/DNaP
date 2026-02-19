@@ -343,6 +343,17 @@ picmap: ; remap PIC
 
         call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
 
+        mov edi, filestat
+        mov ecx, 4096
+        xor eax, eax
+        rep stosb
+
+        mov esi, currentdir
+        mov edi, filestat
+        mov ecx, 16
+        rep movsb
+
+        mov [diroffset], 16
          
         hlt
         jmp $
@@ -886,17 +897,17 @@ cmdparser:
 
         
         cmp word [cmdbuffer], "ls"
-        je .listcontents
-        cmp word [cmdbuffer], "cd"
-        je .changedir
-        cmp word [cmdbuffer], "mv"
-        je .movefile
-        cmp word [cmdbuffer], "rm"
-        je .delete
-        cmp word [cmdbuffer], "wx"
-        je .edit
+        je listcontents
+        ;cmp word [cmdbuffer], "cd"
+        ;je changedir
+        ;cmp word [cmdbuffer], "mv"
+        ;je movefile
+        ;cmp word [cmdbuffer], "rm"
+        ;je delete
+        ;cmp word [cmdbuffer], "wx"
+        ;je edit
         cmp dword [cmdbuffer], "clrs"
-        je .clear
+        je clear
         
 
         movzx ecx, byte [cmdbuffer]
@@ -904,10 +915,34 @@ cmdparser:
         ; do funciton table for ecx[table]
         ; Damn this'll take a while to do. 
         mov ecx, [esi + ecx * 4]
-        jmp ecx
-        
-        
-                 
+        test ecx, ecx
+        jz .skp
+        call ecx ; ???
+skp:
+        popad
+        ret
+
+clear:
+        call clearscreen
+        jmp skp
+
+listcontents:
+        mov esi, filestat
+        xor edx, edx
+        mov ecx, 7
+        int 0x34 ; ???
+        add esi, 4
+.listloop:
+        cmp dword [esi], 0
+        je .endlist
+        int 0x34
+        add esi, 4
+        inc edx
+        cmp edx, 127
+        jle listloop
+.endlist:
+        jmp skp ;place????
+
 
 CHARSHEET
 newlinermsg db " ", 0x0D, 0x0A, 0x00
@@ -923,6 +958,12 @@ dirtest db "Files? What files?", 0x0D, 0x0A, "> ", 0x00
 dirtestlen equ $ - dirtest
 cdtest db "No other directories. Please add %dir command.", 0x0D, 0x0A, "> ", 0x00
 writeactiveflag db 0 ; 0 charbuffer; 1 direct FB; 2 read; 3 open; 4 close; 5 inc; 6 dec; 7 access;
+currentdir:
+        db "/"
+        times 6 db 0
+        db 0 ; permanent
+        dd filestat
+        dd 0
 
 align 4
 chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
@@ -949,3 +990,5 @@ newringoffset resd 1
 endoffset resd 1
 cmdbuffer resb 32
 iscapitol resb 1
+cmdtable resq 256 ; holds command name and address
+diroffset resd 1
