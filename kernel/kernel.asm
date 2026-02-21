@@ -197,8 +197,7 @@ dw 0xAA55
 
 
 
- 
-; 32 BIT SECTION START --
+ ; 32 BIT SECTION START --
 [bits 32]
 %include "macros.inc"
 
@@ -235,6 +234,7 @@ isr%1:
 %endmacro
 
   stagetwostart: ; set segments
+        
         mov ax, 0x10
         mov ss, ax
         mov ds, ax
@@ -261,7 +261,6 @@ isr%1:
         loop .idtloop
 
         lidt [idt_descriptor]
-
 picmap: ; remap PIC
         mov al, 0x11
         out 0x20, al
@@ -288,116 +287,35 @@ picmap: ; remap PIC
         mov al, ah
         out 0x40, al
 
-
-        ; paging :)
-        jmp skipppage
-        mov edi, pagedir
-        mov ecx, 4096
-        xor eax, eax
-        rep stosb
-        mov edi, pagetables
-        mov ecx, (4096 * 32)
-        xor eax, eax
-        rep stosb
-         
-        mov edi, pagetables
-        mov ecx, 32768
-        xor eax, eax
-.pageloop:
-
-        test eax, eax
-        jz .skippage
-        cmp eax, 0x07FFF000
-        jz .skippage
-        
-        mov edx, eax
-        or edx, 0x3
-        mov [edi], edx
-        jmp .continue
-        
-.skippage:
-        mov dword [edi], 0
-.continue:
-        add edi, 4
-        add eax, 4096
-        loop .pageloop
-
-
-        mov edi, pagedir
-        mov esi, pagetables
-        mov ecx, 32
-  
-.pagelink:
-        mov eax, esi
-        or eax, 0x3
-        mov [edi], eax
-        add edi, 4
-        add esi, 4096
-        loop .pagelink
-
-        mov eax, pagedir
-        mov cr3, eax
-
-        mov eax, cr0
-        or eax, 0x80000000
-        mov cr0, eax
-
-skipppage:
-        
-        movzx eax, word [pitch]
-        shl eax, 8
-        add eax, 16
-        mov bl, 0x20
-        mov dx, 0xFADE
-        mov ecx, 48
-
-        cld
-        mov al, 0x20
-       
-        movzx ebx, word [pitch]
-        shl ebx, 4
         sti
-
-        ;call clearscreen ; clear screen
         
+        ;call clearscreen
+        ;mov esi, intromsg
+        ;xor ecx, ecx
+        ;call printscreen
+        ;;call clearscreen
+        ;mov esi, cmdprompt
+        ;mov ecx, 2
+        ;call printscreen
+
         
-        mov eax, 16 ; print diagnostic messages
-        mov esi, testmessage
-        add eax, ebx
-        mov ebx, 0x0F80
-        ;mov [currentoffset], eax
-        call printstring
 
-        mov dx, 0x3F2
-        mov al, 0x0C
-        out dx, al ; kill floppy
-
-        xor al, al
-        out dx, al ; reset floppy reader. 
-
-        mov esi, idtupmsg
-        mov ebx, 0x0F80
-        mov eax, [initoffset]
-        call printstring
-
-        call clearscreen ; clear screen. If all goes well, diagnostic messages needn't be printed.
-
-        mov edi, filestat
-        mov ecx, 4096
-        xor eax, eax
+        mov edi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        mov eax, 0x88
         rep stosb
 
-        mov esi, currentdir
-        mov edi, filestat
-        mov ecx, 16
-        rep movsb
 
-        mov [diroffset], 16
-         
+        mov edi, [framebuffer]
+        mov dword [edi + 16], 0xF8F8F8F8
+
         hlt
         jmp $
+        
+        ; MAIN
 
-align 16
+
+        align 16
 idt_descriptor:
         dw (256 * 8) - 1
         dd idt_buffer
@@ -490,49 +408,7 @@ handlers:
         times 12 dd NULLFAULT ; 11
         dd timer_handler ; 0x20
         dd keyboard_handler ; 0x21
-        times 7 dd NULLFAULT ;0x22-0x28
-        dd stdprint ; int 0x29
-        dd printwrap
-printwrap:
-        call printstring
-        
-
-stdprint:
-        ; Atomic wrapper for printstring. Asynchronous. Writes to charbuffer instead of screen, technically
-        ; ESI string ECX length (if ecx is -1), goes to null termination
-        bt [writeactiveflag], 0
-        jc stdprint
-        bts [writeactiveflag], 0
-        pushad
-        mov edi, keyboardringbuffer
-        mov ebx, dword [newringoffset]
-        mov edx, dword [endoffset]
-        add edi, ebx
-        cmp ecx, 0xFFFFFFFF
-        je .nullterm
-        rep movsb
-        add dword [newringoffset], ecx
-        call printscreen
-        mov edx, [newringoffset]
-        mov [endoffset], edx
-        popad
-        btr [writeactiveflag], 0
-        ret
-.nullterm:
-        mov al, byte [esi]
-        test al, al
-        jz .finish
-        inc esi
-        mov byte [edi], al
-        inc edi
-        inc dword [newringoffset]
-        jmp .nullterm
-.finish:
-        call printscreen
-        popad
-        btr [writeactiveflag], 0
-        ret
-        
+        times 9 dd NULLFAULT ;0x22-0x30
 
 timer_handler:
         add dword [clocktimer], 1
@@ -647,33 +523,37 @@ SimdFault:
         ret
 NULLFAULT:
         ret
-exceedsboundsmsg db "Bounds overflow?!", 0x0D, 0x0A, 0x00
-invalidopcodemsg db "Invalid Opcode", 0x0D, 0x0A, 0x00
-devnotavailmsg db "Device Not Available", 0x0D, 0x0A, 0x00
-doublefaultmsg db "DOUBLE FAULT RETURNING", 0x0D, 0x0A, 0x00
-tsscorruptmsg db "Invalid TSS", 0x0D, 0x0A, 0x00
-invsegmsg db "Invalid Segment selectors", 0x0D, 0x0A, 0x00
-stackfaultmsg db "Bad Stack", 0x0D, 0x0A, 0x00
-gpfaultmsg db "General Protection Fault", 0x0D, 0x0A, 0x00
-pagefaultmsg db "Page fault", 0x0D, 0x0A, 0x00
-fpuerrormsg db "FPU Error", 0x0D, 0x0A, 0x00
-alignfaultmsg db "Alignment Fault", 0x0D, 0x0A, 0x00
-machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Have fun :)", 0x0D, 0x0A, 0x00
-simdfaultmsg db "SIMD fault", 0x0D, 0x0A, 0x00
 
-         
-overflowmsg db "Who the actual mess uses INTO?", 0x0D, 0x0A, 0x00
 
-hardwarefailuremsg db "Critical Hardware Failure", 0x0D, 0x0A, 0x00
-singlestepmsg db "SingleStep", 0x0D, 0x0A, 0x00
-
-printchar: ; well mess I guess we're doing it the hard way. character in al, frame offset in ebx
-        pushfd
+printchar: ; well mess I guess we're doing it the hard way. character in al, row in bh, column in bl
+        ; Printarguments holds offset
+        ; printarguments + 4 holds character
+        ; if ecx is zero, we can use direct load instead of printarguments
+        ; DOES NOT SAVE REGISTERS CALLER SAVED
+        ; row bh 1 INDEXED
+        ; column bl 1 INDEXED
         pushad
+        pushfd
         cli
-
+        push ecx
+        movzx eax, word [pitch]
+        movzx edx, bh
+        movzx ecx, bl
+        movzx ebx, bh
+        dec ecx
+        dec ebx
+        shl ecx, 4 ; col
+        shl ebx, 4
+        shl edx, 1
+        add ebx, edx 
+        imul ecx, eax
+        shl ebx, 2
+        add ebx, ecx
+        pop ecx
+        test ecx, ecx
+        jz .skipload
         movzx eax, byte [printarguments + 4]
-        mov ebx, dword [printarguments]
+.skipload:
         sub al, 0x20
 .pitchedmaybe:
         mov edi, [framebuffer]
@@ -701,8 +581,9 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, fra
         cmp ecx, 16
         jle .preseter ; JLE
 
-        popad
+        mov word [coordxy], bx
         popfd
+        popad
         ret
 
 .preseter:
@@ -718,282 +599,76 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, fra
         mov bx, word [printarguments + 5]
         mov word [edi + edx*2], 0xFFFF ;bx
         pop ebx
-        jmp .printed        
+        jmp .printed 
 
-printstring: ; takes string in esi, offset in eax, color in ebx, goes to 0x00. Supports 0x0A and 0x0D.
-        pushfd
-        cli
-        pushad
-        mov dword [printarguments], eax
-        cld
-        mov [initoffset], eax
+; need printstring and keyboard driver
+; clearscreen, printscreen, cmdparser
+; paging :(
+; 
+
+printstring: ; string at esi
+        pushfd ; count at ecx 
+        pushad ; null term if ecx = 0
+        cli ; row in bh | column in bl 1 INDEXED
         xor ecx, ecx
-        mov word [printarguments + 5], bx
-.loop:
+        cld
+        test ecx, ecx
+        jz .strloopnull
+
+.strloopcount:
+        lodsb
+        cmp al, 0x0D
+        je .strcr
+        cmp al, 0x0A
+        je .newlinecount
+        call printchar
+        inc bl
+        cmp bl, 51
+        jg .newlinecount
+        loop .strloopcount
+        
+        popad
+        popfd
+        ret
+
+        
+.strloopnull:           
         lodsb
         test al, al
-        jz .endprint
+        jz .endstrloop
         cmp al, 0x0D
-        je .cr
+        je .crnull
         cmp al, 0x0A
-        je .newline
-        ;cmp al, 0x20
-        ;je .space
-        mov byte [printarguments + 4], al
+        je .newlinenull
         call printchar
-        add dword [printarguments], 32
-        jmp .loop
-        
+        inc bl
+        cmp bl, 51
+        jg .newlinenull
 
-.cr:
-        mov ecx, [initoffset]
-        mov dword [printarguments], ecx
-        jmp .loop
-.newline:
-        movzx ecx, word [pitch]
-        movzx edx, word [pitch]
-        shl ecx, 4
-        shl edx, 1
-        add ecx, edx
-        add dword [printarguments], ecx
-        add dword [initoffset], ecx
-        jmp .loop
-.space:
-        add dword [printarguments], 32
-        ;inc esi ; ????
-        jmp .loop
-.endprint:
-        mov ebx, dword [printarguments]
-        mov dword [initoffset], ebx
+.endstrloop:
         popad
         popfd
         ret
+.crnull:
+        mov bl, 1
+        jmp .strloopnull
 
-times 16 db 0
+.newlinecount:
+        inc bh
+        mov bl, 1
+        loop .strloopcount
 
-keyboard_handler:
-        in al, 0x60
-        cmp al, 0xAA
-        je unshift
-        cmp al, 0xB6
-        je unshift
-        cmp al, 0x80
-        jae skipkeyboard
-        cmp al, 0x2A
-        je shift
-        cmp al, 0x36
-        je shift
-        cmp al, 0x0E
-        je backspace
-        cmp al, 0x1C
-        je skipperkb ; cmp to ENTER
-        ;cmp al, 0xE0
-        ;je extension
-        cmp byte [iscapitol], 0
-        jnz uppercase
-        movzx eax, al
-        ; cursor movement
-        movzx eax, byte [chartab + eax]
- 
-possiblyshifted:
-        push ebx
-        mov ebx, [newringoffset] ; newringoffset
-        mov byte [keyboardringbuffer + ebx], al
-        inc dword [newringoffset] ; newringoffset
-        mov byte [keyboardringbuffer + ebx + 1], 0
-        pop ebx
-skipkeyboard:
+.newlinenull:
+        inc bh
+        mov bl, 1
+        jmp .strloopnull
 
-        mov al, 0x20 ; Send EOI
-        out 0x20, al
-        mov word [printarguments + 5], 0xFFFF
-        call printscreen ; print characters. We'll see how this goes.
-        ret
-        
-skipperkb:
-        mov ebx, [newringoffset] ; newringoffset
-	mov byte [keyboardringbuffer + ebx], 0x0D
-	mov byte [keyboardringbuffer + ebx + 1], 0x0A
-	mov byte [keyboardringbuffer + ebx + 2], 0x00
-	add dword [newringoffset], 2
-        mov al, 0x20
-        out 0x20, al
-        call printscreen
-        call cmdparser
-        ret
-
-uppercase:
-        
-        movzx eax, al
-        movzx eax, byte [chartabshift + eax]
-        push ebx
-        mov ebx, [newringoffset] ; newringoffset
-        mov byte [keyboardringbuffer + ebx], al
-        inc dword [newringoffset] ; newringoffset
-        mov byte [keyboardringbuffer + ebx + 1], 0
-        pop ebx
-        jmp skipkeyboard
-
-extension:
-        ; TEMP SO INCREDIBLY TEMP
-        in al, 0x60
-        cmp al, 0
-
-shift: ; this has some problems
-        mov byte [iscapitol], 1
-        jmp skipkeyboard
-
-unshift:
-        mov byte [iscapitol], 0
-        jmp skipkeyboard
-backspace:
-        push edi
-        mov ecx, [newringoffset] ; endoffset 
-        mov byte [keyboardringbuffer + ecx  - 1], 0x20 ; overwrite previous byte of kbringbuffer
-        ;sub [newringoffset], 32
-        dec dword [newringoffset] ; mov newringoffset back one
-        sub dword [printarguments], 32 ; no idea
-        mov edi, [framebuffer]
-        mov ebx, [printarguments]
-        xor edx, edx
-        add edi, ebx
-.backouterloop:
-        xor ecx, ecx
-.backinnerloop:
-        mov dword [edi + ecx * 2], 0x0000
-        inc ecx
-        cmp ecx, 16
-        jle .backinnerloop
-        movzx ebx, word [pitch]
-        inc edx
-        add edi, ebx
-        cmp edx, 16
-        jle .backouterloop
-        pop edi
-        mov al, 0x20
-        out 0x20, al
-        ret        
-        
-clearscreen:
-        pushfd
-        cli
-        pushad
-        mov edi, [framebuffer]
-        mov ecx, (600 * 800) / 2
-        mov eax, 0x00000000
-        rep stosd
-        mov dword [newringoffset], 0
-        mov dword [endoffset], 0
-        mov byte [keyboardringbuffer + 1961], 0
-        mov dword [initoffset], 0
-
-        mov edi, keyboardringbuffer
-        mov ecx, 1962
-        mov eax, 0x00
-        rep stosb
-
-        mov esi, cmdprmpt ; print cmdprmpt icon
-        mov ebx, 0xF800
-        mov eax, 0
-        call printstring
-        add dword [initoffset], 32
-        
-        popad
-        popfd
-        ret
-
-printscreen:
-        pushad
-
+.strcr:
+        mov bl, 1
+        loop .strloopcount
         
         
-        mov esi, keyboardringbuffer
-        ;mov eax, [initoffset] ; ???? initoffset?
-        add esi, [endoffset] ; TEMP
-        mov ebx, 0x0F80
-        call printstring
-        mov edi, [endoffset]
-        mov [initoffset], edi ; TEMP
-        popad
-        ret
-
-        errorcodes dd 0 ; jmp over
-printarguments: ; qword
-        dd 0 ; offset
-        db 0 ; ASCII code
-        dw 0 ; color
-        db 0 ; padding / counter
-
-cmdparser:
-        pushad
-        ; test, jnz???
-        cld
-        mov edi, cmdbuffer
-        xor eax, eax
-        mov ecx, 32
-        rep stosb
-        
-        
-        mov esi, keyboardringbuffer
-        mov ebx, [endoffset]
-        mov ecx, [newringoffset]
-        mov edi, cmdbuffer
-        add esi, ebx
-        sub ecx, ebx
-        rep movsb
-
-
-        
-        cmp word [cmdbuffer], "ls"
-        je listcontents
-        ;cmp word [cmdbuffer], "cd"
-        ;je changedir
-        ;cmp word [cmdbuffer], "mv"
-        ;je movefile
-        ;cmp word [cmdbuffer], "rm"
-        ;je delete
-        ;cmp word [cmdbuffer], "wx"
-        ;je edit
-        cmp dword [cmdbuffer], "clrs"
-        je clear
-        
-
-        ;movzx ecx, byte [cmdbuffer]
-        ;mov edi, cmdtable
-        ; do funciton table for ecx[table]
-        ; Damn this'll take a while to do. 
-        ;mov ecx, [esi + ecx * 4]
-        ;test ecx, ecx
-        ;jz skp
-        ;call ecx ; ???
-
-        mov esi, invalidcmd
-        call printstring
-        skp:
-        popad
-        ret
-
-clear:
-        call clearscreen
-        jmp skp
-
-listcontents:
-        mov esi, filestat
-        xor edx, edx
-        call printstring
-        add esi, 4
-.listloop:
-        cmp dword [esi], 0
-        je .endlist
-        call printstring
-        add esi, 4
-        inc edx
-        cmp edx, 127
-        jle .listloop
-.endlist:
-        jmp skp ;place????
-
-
+                
 reghexprint: ; first arg in ebx
         pushad
         push ebp
@@ -1023,51 +698,230 @@ reghexprint: ; first arg in ebx
         pop ebp
         popad
         ret
+
+
+keyboard_handler:
+        pushad
+        in al, 0x60
+        cmp al, 0xAA
+        je .unshift
+        cmp al, 0xB6
+        je .unshift
+        cmp al, 0x80
+        jae .skipkeyboard
+        cmp al, 0x2A
+        je .shift
+        cmp al, 0x36
+        je .shift
+        cmp al, 0x0E
+        je .backspace
+        cmp al, 0x1C
+        je .enter ; cmp to ENTER
+        ;cmp al, 0xE0
+        ;je extension
+        cmp byte [iscapitol], 0
+        jnz .uppercase
+        movzx eax, al
+        ; cursor movement
+        movzx eax, byte [chartab + eax]
+ 
+.possiblyshifted:
+        push ebx
+        mov bx, word [endcoordxy]
+        movzx ecx, bh
+        movzx ebx, bl
+        dec ecx
+        dec ebx
+        imul ecx, 51
+        add ecx, ebx
+        mov byte [keybuffer + ecx], al
+        mov byte [keybuffer + ecx + 1], 0
+        inc byte [endcoordxy + 1]
+        cmp byte [endcoordxy + 1], 51
+        jg .incrow
+        pop ebx
+        
+.skipkeyboard:
+
+        mov al, 0x20 ; Send EOI
+        out 0x20, al
+        mov word [printarguments + 5], 0xFFFF
+        call printscreen ; print characters. We'll see how this goes.
+        popad
+        ret
+        
+.enter:
+
+        mov bx, word [endcoordxy]
+        movzx ecx,bh
+        movzx ebx, bl
+        dec ecx
+        dec ebx
+        imul ecx, 51
+        add ecx, ebx
+        mov word [keybuffer + ecx], 0x0A0D
+        mov byte [keybuffer + ecx + 2], 0
+        inc byte [coordxy]
+        jmp .skipkeyboard
+
+.uppercase:
+
+        movzx eax, al
+        movzx eax, byte [chartabshift + eax]
+        jmp .possiblyshifted
+
+.extension:
+        ; TEMP SO INCREDIBLY TEMP
+        in al, 0x60
+        cmp al, 0
+
+.shift: ; this has some problems
+        mov byte [iscapitol], 1
+        jmp .skipkeyboard
+
+.unshift:
+        mov byte [iscapitol], 0
+        jmp .skipkeyboard
+        
+.incrow:
+        mov byte [endcoordxy + 1], 1
+        inc byte [endcoordxy]
+        jmp .skipkeyboard
+
+.backspace:
+        mov bx, [endcoordxy]
+        test bl, bl
+        jz .decrow
+        movzx ecx, bh
+        movzx ebx, bl
+        mov edi, [framebuffer]
+        imul ecx, 51
+        add ecx, ebx
+        mov byte [keybuffer + ecx], 0x20
+        dec byte [endcoordxy + 1]
+        movzx ecx, bh
+        movzx edx, bl
+        
+        movzx eax, word [pitch]
+        movzx edx, bh
+        movzx ecx, bl
+        movzx ebx, bh
+        dec ecx
+        dec ebx
+        shl ecx, 4 ; col
+        shl ebx, 4
+        shl edx, 1
+        add ebx, edx 
+        imul ecx, eax
+        shl ebx, 2
+        add ebx, ecx ; offset at ecx
+        pop ecx
+        mov ecx, 16
+.blitloop:
+        mov word [edi + ebx], 0
+        add edi, eax
+        loop .blitloop
+        jmp .skipkeyboard
         
 
+.decrow:
+        mov byte [endcoordxy - 1], 51
+        dec byte [endcoordxy]
 
-CHARSHEET
-newlinermsg db " ", 0x0D, 0x0A, 0x00
-hexlut db "0123456789ABCDEF"
-testmessage db "GDT UP", 0x0D, 0x0A, "STACK UP", 0x0D, 0x0A, "ENTERED PROTECTED MODE", 0x0D, 0x0A, "BEGINNING IDT...", 0x0D, 0x0A, 0x00
-divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
-idtupmsg db "IDT UP LOADING KERNEL...", 0x0D, 0x0A, 0x00
-ioflags db 0
-cmdprmpt db "> ", 0x00
-clocktimer dq 0
-invalidcmd db "Invalid Command :(", 0x0A, 0x0D, "> ", 0x00
-dirtest db "Files? What files?", 0x0D, 0x0A, "> ", 0x00
-dirtestlen equ $ - dirtest
-cdtest db "No other directories. Please add %dir command.", 0x0D, 0x0A, "> ", 0x00
-writeactiveflag db 0 ; 0 charbuffer; 1 direct FB; 2 read; 3 open; 4 close; 5 inc; 6 dec; 7 access;
-currentdir:
-        db "/"
-        times 6 db 0
-        db 0 ; permanent
-        dd filestat
-        dd 0
+
+printfullscreen: ; DOES NOT SAVE
+        pushad
+        xor ecx, ecx
+        mov esi, keybuffer
+        call printstring
+        popad
+        ret
+        
+printscreen: ; DOES NOT SAVE
+        pushad
+        xor ecx, ecx
+        movzx ebx, bh
+        mov esi, keybuffer
+        imul ebx, 51
+        add esi, ebx
+        call printscreen
+        popad
+        ret
+
+clearscreen: ; DOES SAVE
+        pushfd
+        pushad
+        cli
+        mov esi, keybuffer
+        mov ecx, (33 * 51)
+        cld
+        xor eax, eax
+        rep stosb
+
+        mov esi, [framebuffer]
+        mov ecx, (800 * 600 * 2)
+        xor eax, eax
+        rep stosb
+
+        mov word [strtcoordxy], 0
+        mov word [endcoordxy], 0
+        mov word [coordxy], 0
+
+        mov esi, cmdprompt
+        mov ecx, 2
+        call printstring
+        popad
+        popfd
+        ret
+
+section .data
+
+
 
 align 4
 chartab db 0x20, 0x20, "1234567890-=", 0x20, 0x20, "qwertyuiop[]", 0x20, 0x20, "asdfghjkl;'`", 0x20, "\zxcvbnm,./", 0x20, 0x20
 chartabshift db 0x20, 0x20, "!@#$%^&*()_+", 0x20, 0x20, "QWERTYUIOP{}", 0x20, 0x20, 'ASDFGHJKL:"~', 0x20, "|ZXCVBNM<>?", 0x20, 0x20
 
+exceedsboundsmsg db "Bounds overflow?!", 0x0D, 0x0A, 0x00
+invalidopcodemsg db "Invalid Opcode", 0x0D, 0x0A, 0x00
+devnotavailmsg db "Device Not Available", 0x0D, 0x0A, 0x00
+doublefaultmsg db "DOUBLE FAULT RETURNING", 0x0D, 0x0A, 0x00
+tsscorruptmsg db "Invalid TSS", 0x0D, 0x0A, 0x00
+invsegmsg db "Invalid Segment selectors", 0x0D, 0x0A, 0x00
+stackfaultmsg db "Bad Stack", 0x0D, 0x0A, 0x00
+gpfaultmsg db "General Protection Fault", 0x0D, 0x0A, 0x00
+pagefaultmsg db "Page fault", 0x0D, 0x0A, 0x00
+fpuerrormsg db "FPU Error", 0x0D, 0x0A, 0x00
+alignfaultmsg db "Alignment Fault", 0x0D, 0x0A, 0x00
+machinefaultmsg db "Machine Check Fatal Error", 0x0D, 0x0A, "Have fun :)", 0x0D, 0x0A, 0x00
+simdfaultmsg db "SIMD fault", 0x0D, 0x0A, 0x00
+overflowmsg db "Who the actual mess uses INTO?", 0x0D, 0x0A, 0x00
+hardwarefailuremsg db "Critical Hardware Failure", 0x0D, 0x0A, 0x00
+singlestepmsg db "SingleStep", 0x0D, 0x0A, 0x00
+iscapitol db 0
+hexlut db "0123456789ABCDEF"
+cmdprompt db "> "
+clocktimer dq 0
+
+divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
+intromsg db "DNaP BOOTING...", 0x0D, 0x0A, "SYSTEM UP :)", 0x0D, 0x0A, "HC", 0x0D, 0x0A, 0x00
+
+
+printarguments:
+        dd 0
+        db 0
+        dw 0xFFFF
+        db 0
+
+CHARSHEET
+
+strtcoordxy dw 0
+endcoordxy dw 0
 
 section .bss
-resb 0
-align 4096
-pagedir resd 1024         ; 4 KB
-align 4096
-pagetables resb 32*4096   ; 128 KB, no init, smaller binary
-
+coordxy resb 2
+keybuffer resb 51 * 33
 scratchpad resq 1024 ; 8 KiB scratchpad
 filestat resq 256 ; 4KB scratchpad to hold file addresses, names, and sizes in RAM. Directories are files that hold extended addresses.
                         ; 64 bit filename, 32 bit address, 16 bit size; 16 bit attributes. Can have 128 top-directories. 
-initoffset resd 1
-currentoffset resd 1
-keyboardringbuffer resb 1962
-newringoffset resd 1
-endoffset resd 1
 cmdbuffer resb 32
-iscapitol resb 1
-cmdtable resq 256 ; holds command name and address
-diroffset resd 1
