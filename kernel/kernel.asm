@@ -288,30 +288,53 @@ picmap: ; remap PIC
         out 0x40, al
 
         sti
-        
+        ;mov bh, 1
+        ;mov bl, 1
         ;call clearscreen
         ;mov esi, intromsg
         ;xor ecx, ecx
+        ;mov bh, 1
+        ;;mov bl, 1
         ;call printscreen
-        ;;call clearscreen
+        ;call clearscreen
         ;mov esi, cmdprompt
         ;mov ecx, 2
+        ;mov bh, 1
+        ;mov bl, 1
         ;call printscreen
 
-        
+        mov eax, "H"
+        xor ecx, ecx
+        mov bh, 1
+        mov bl, 1
+        call printchar
 
-        mov edi, [framebuffer]
-        mov ecx, (800 * 600 * 2)
-        mov eax, 0x88
-        rep stosb
+        mov byte [printarguments + 4], "I"
+        inc ecx
+        mov bh, 1
+        mov bl, 2
+        call printchar
 
+        mov eax, ":"
+        xor ecx, ecx
+        mov bh, 1
+        mov bl, 3
+        call printchar
+        mov eax, ")"
+        xor ecx, ecx
+        mov bh, 1
+        mov bl, 4
+        call printchar
 
-        mov edi, [framebuffer]
-        mov dword [edi + 16], 0xF8F8F8F8
-
+        xor ecx, ecx
+        mov bh, 4
+        mov bl, 1
+        mov esi, quickdata
+        call printstring
+ 
         hlt
         jmp $
-        
+        quickdata db "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x0D, 0x0A, "abcdefghijklmnopqrstuvwxyz", 0x0D, 0x0A, "1234567890", 0x0D, 0x0A, "!@#$%^&*()-=+_`~\|][{}]?/.,<>", 0x00
         ; MAIN
 
 
@@ -535,6 +558,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         pushad
         pushfd
         cli
+        push eax
         push ecx
         movzx eax, word [pitch]
         movzx edx, bh
@@ -542,26 +566,27 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         movzx ebx, bh
         dec ecx
         dec ebx
-        shl ecx, 4 ; col
+        shl ecx, 4 ; col`
         shl ebx, 4
         shl edx, 1
         add ebx, edx 
-        imul ecx, eax
-        shl ebx, 2
-        add ebx, ecx
+        imul ebx, eax ; ecx, eax
+        shl ecx, 1 ; ebx
+        add ebx, ecx ; find offset
         pop ecx
-        test ecx, ecx
+        pop eax
+        test ecx, ecx ; is ECX 0?
         jz .skipload
-        movzx eax, byte [printarguments + 4]
+        movzx eax, byte [printarguments + 4] ; don't overwrite character in al
 .skipload:
         sub al, 0x20
 .pitchedmaybe:
         mov edi, [framebuffer]
         shl eax, 2
-        add edi, ebx
+        add edi, ebx ; get actual address
         lea esi, [chars + eax*8] ; get address to char and framebuffer
 
-        xor ecx, ecx
+        xor ecx, ecx ; counter
 
 .printsetup:
         xor eax, eax
@@ -581,7 +606,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         cmp ecx, 16
         jle .preseter ; JLE
 
-        mov word [coordxy], bx
+        
         popfd
         popad
         ret
@@ -610,10 +635,10 @@ printstring: ; string at esi
         pushfd ; count at ecx 
         pushad ; null term if ecx = 0
         cli ; row in bh | column in bl 1 INDEXED
-        xor ecx, ecx
         cld
         test ecx, ecx
         jz .strloopnull
+        
 
 .strloopcount:
         lodsb
@@ -644,6 +669,7 @@ printstring: ; string at esi
         inc bl
         cmp bl, 51
         jg .newlinenull
+        jmp .strloopnull
 
 .endstrloop:
         popad
@@ -702,6 +728,8 @@ reghexprint: ; first arg in ebx
 
 keyboard_handler:
         pushad
+        mov edi, [framebuffer]
+        mov dword [edi], 0xF2E0
         in al, 0x60
         cmp al, 0xAA
         je .unshift
@@ -815,7 +843,7 @@ keyboard_handler:
         imul ecx, eax
         shl ebx, 2
         add ebx, ecx ; offset at ecx
-        pop ecx
+        ;pop ecx
         mov ecx, 16
 .blitloop:
         mov word [edi + ebx], 0
@@ -844,7 +872,7 @@ printscreen: ; DOES NOT SAVE
         mov esi, keybuffer
         imul ebx, 51
         add esi, ebx
-        call printscreen
+        call printstring
         popad
         ret
 
