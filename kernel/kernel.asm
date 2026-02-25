@@ -287,55 +287,49 @@ picmap: ; remap PIC
         mov al, ah
         out 0x40, al
 
+        mov dx, 0x3F2
+        mov al, 0x0C
+        out dx, al ; kill floppy
+
+        xor al, al
+        out dx, al ; reset floppy reader. 
+
+        mov ecx, (51 * 33)
+        mov edi, keybuffer
+        xor eax, eax
+        rep stosb
+
+        mov byte [keybuffer], "A"
+        mov byte [keybuffer + 1], "B"
+        mov byte [keybuffer + 2], 0
+
         sti
-        ;mov bh, 1
-        ;mov bl, 1
-        ;call clearscreen
-        ;mov esi, intromsg
-        ;xor ecx, ecx
-        ;mov bh, 1
-        ;;mov bl, 1
-        ;call printscreen
-        ;call clearscreen
-        ;mov esi, cmdprompt
-        ;mov ecx, 2
-        ;mov bh, 1
-        ;mov bl, 1
-        ;call printscreen
 
-        mov eax, "H"
+        mov esi, printstringtst
         xor ecx, ecx
         mov bh, 1
         mov bl, 1
-        call printchar
-
-        mov byte [printarguments + 4], "I"
-        inc ecx
-        mov bh, 1
-        mov bl, 2
-        call printchar
-
-        mov eax, ":"
-        xor ecx, ecx
-        mov bh, 1
-        mov bl, 3
-        call printchar
-        mov eax, ")"
-        xor ecx, ecx
-        mov bh, 1
-        mov bl, 4
-        call printchar
-
-        xor ecx, ecx
-        mov bh, 4
-        mov bl, 1
-        mov esi, quickdata
         call printstring
- 
+
+        mov byte [coordxy], 2
+        mov byte [coordxy + 1], 4
+
+        mov esi, cmdprompt
+        xor ecx, ecx
+        mov bh, 2
+        mov bl, 1
+        call printstring
+
+
+        mov bh, 2
+        mov bl, 3
+        call printcursor
+term:
         hlt
-        jmp $
-        quickdata db "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x0D, 0x0A, "abcdefghijklmnopqrstuvwxyz", 0x0D, 0x0A, "1234567890", 0x0D, 0x0A, "!@#$%^&*()-=+_`~\|][{}]?/.,<>", 0x00
+        jmp term
         ; MAIN
+
+
 
 
         align 16
@@ -436,7 +430,6 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
-        ;call printscreen ; GET RID OF THIS LATER
         ret
 
 DivZero:
@@ -606,7 +599,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         cmp ecx, 16
         jle .preseter ; JLE
 
-        
+        inc word [endcoordxy]
         popfd
         popad
         ret
@@ -642,13 +635,17 @@ printstring: ; string at esi
 
 .strloopcount:
         lodsb
+        movzx eax, al
         cmp al, 0x0D
         je .strcr
+        push ecx
         cmp al, 0x0A
         je .newlinecount
+        xor ecx, ecx ; ??``
         call printchar
         inc bl
         cmp bl, 51
+        pop ecx
         jg .newlinecount
         loop .strloopcount
         
@@ -659,12 +656,14 @@ printstring: ; string at esi
         
 .strloopnull:           
         lodsb
+        movzx eax, al
         test al, al
         jz .endstrloop
         cmp al, 0x0D
         je .crnull
         cmp al, 0x0A
         je .newlinenull
+        xor ecx, ecx; ??
         call printchar
         inc bl
         cmp bl, 51
@@ -695,9 +694,8 @@ printstring: ; string at esi
         
         
                 
-reghexprint: ; first arg in ebx
+reghexprint: ; first arg in ebx, coords in ecx yes I know it's weird
         pushad
-        push ebp
         mov ebp, esp
         sub esp, 9
         xor eax, eax
@@ -718,6 +716,7 @@ reghexprint: ; first arg in ebx
         loop .convloop
         
         mov esi, esp
+        mov bx, cx
         call printstring
 
         mov esp, ebp
@@ -729,7 +728,7 @@ reghexprint: ; first arg in ebx
 keyboard_handler:
         pushad
         mov edi, [framebuffer]
-        mov dword [edi], 0xF2E0
+        mov dword [edi], 0xF2E0FFFF
         in al, 0x60
         cmp al, 0xAA
         je .unshift
@@ -755,17 +754,11 @@ keyboard_handler:
  
 .possiblyshifted:
         push ebx
-        mov bx, word [endcoordxy]
-        movzx ecx, bh
-        movzx ebx, bl
-        dec ecx
-        dec ebx
-        imul ecx, 51
-        add ecx, ebx
-        mov byte [keybuffer + ecx], al
-        mov byte [keybuffer + ecx + 1], 0
-        inc byte [endcoordxy + 1]
-        cmp byte [endcoordxy + 1], 51
+        movzx ebx, word [endcoordxy]
+
+        mov byte [keybuffer + ebx], al
+        mov byte [keybuffer + ebx + 1], 0
+        inc word [endcoordxy]
         jg .incrow
         pop ebx
         
@@ -774,10 +767,20 @@ keyboard_handler:
         mov al, 0x20 ; Send EOI
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
+        mov bh, byte [coordxy]
+        mov bl, 1
+        cmp bh, 33
+        mov esi, keybuffer
+        jae .wrong
+.wronged:
+        inc bh
+        xor ecx, ecx
         call printscreen ; print characters. We'll see how this goes.
         popad
         ret
-        
+.wrong:
+        mov bh, 1
+        jmp .wronged
 .enter:
 
         mov bx, word [endcoordxy]
@@ -820,60 +823,38 @@ keyboard_handler:
         mov bx, [endcoordxy]
         test bl, bl
         jz .decrow
+.rowed:
         movzx ecx, bh
         movzx ebx, bl
-        mov edi, [framebuffer]
+        dec ecx
+        dec ebx
         imul ecx, 51
         add ecx, ebx
         mov byte [keybuffer + ecx], 0x20
         dec byte [endcoordxy + 1]
-        movzx ecx, bh
-        movzx edx, bl
-        
-        movzx eax, word [pitch]
-        movzx edx, bh
-        movzx ecx, bl
-        movzx ebx, bh
-        dec ecx
-        dec ebx
-        shl ecx, 4 ; col
-        shl ebx, 4
-        shl edx, 1
-        add ebx, edx 
-        imul ecx, eax
-        shl ebx, 2
-        add ebx, ecx ; offset at ecx
-        ;pop ecx
-        mov ecx, 16
-.blitloop:
-        mov word [edi + ebx], 0
-        add edi, eax
-        loop .blitloop
+        dec bl
+        call cursorerase
+        inc bl
         jmp .skipkeyboard
-        
 
 .decrow:
         mov byte [endcoordxy - 1], 51
         dec byte [endcoordxy]
-
+        jmp .rowed
 
 printfullscreen: ; DOES NOT SAVE
         pushad
         xor ecx, ecx
         mov esi, keybuffer
+        mov bh, 1
+        mov bl, 1
         call printstring
         popad
         ret
         
 printscreen: ; DOES NOT SAVE
-        pushad
-        xor ecx, ecx
-        movzx ebx, bh
         mov esi, keybuffer
-        imul ebx, 51
-        add esi, ebx
         call printstring
-        popad
         ret
 
 clearscreen: ; DOES SAVE
@@ -891,15 +872,83 @@ clearscreen: ; DOES SAVE
         xor eax, eax
         rep stosb
 
-        mov word [strtcoordxy], 0
-        mov word [endcoordxy], 0
-        mov word [coordxy], 0
+        mov byte [strtcoordxy], 1
+        mov byte [endcoordxy], 1
+        mov byte [coordxy], 1
+        mov byte [strtcoordxy + 1], 1
+        mov byte [endcoordxy + 1], 1
+        mov byte [coordxy + 1], 1
 
         mov esi, cmdprompt
         mov ecx, 2
         call printstring
         popad
         popfd
+        ret
+
+printcursor:
+        pushad
+        pushfd
+        cli
+        mov edi, [framebuffer]
+        push ebx
+        movzx ecx, bh ; row
+        movzx ebx, bl ; column
+        movzx edx, word [pitch]
+        dec ecx
+        dec ebx
+        shl ecx, 4
+        shl ebx, 5
+        imul ecx, edx
+        add edi, ebx
+        add edi, ecx
+        xor ebx, ebx
+.cursorloop:
+        mov esi, edi
+        mov ecx, 32
+        mov eax, 0xFFFFFFFF
+        rep stosb
+
+        inc ebx
+        mov edi, esi
+        add edi, edx
+        cmp ebx, 16
+        jl .cursorloop
+
+        pop ebx
+        mov word [cursorxy], bx       
+        popfd
+        popad
+        ret
+
+cursorerase:
+        pushad
+        pushfd
+        cli
+        mov edi, [framebuffer]
+        movzx ecx, bh ; row
+        movzx ebx, bl ; column
+        movzx edx, word [pitch]
+        dec ecx
+        dec ebx
+        shl ecx, 4
+        shl ebx, 5
+        imul ecx, edx
+        add edi, ebx
+        add edi, ecx
+        xor ebx, ebx
+        mov ecx, 32
+.cursorerase:
+        xor eax, eax
+        mov esi, edi
+        rep stosb
+        inc ebx
+        mov edi, esi
+        add edi, edx
+        cmp ebx, 16
+        jle .cursorerase
+        popfd
+        popad
         ret
 
 section .data
@@ -930,10 +979,9 @@ iscapitol db 0
 hexlut db "0123456789ABCDEF"
 cmdprompt db "> "
 clocktimer dq 0
+printstringtst db "Hello!",0x00
 
 divzeromsg db "DIVISION BY ZERO",0x0D, 0x0A, 0x00
-intromsg db "DNaP BOOTING...", 0x0D, 0x0A, "SYSTEM UP :)", 0x0D, 0x0A, "HC", 0x0D, 0x0A, 0x00
-
 
 printarguments:
         dd 0
@@ -945,6 +993,8 @@ CHARSHEET
 
 strtcoordxy dw 0
 endcoordxy dw 0
+cursorblink dw 0
+cursorxy dw 0
 
 section .bss
 coordxy resb 2
