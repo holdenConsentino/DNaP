@@ -775,7 +775,7 @@ keyboard_handler:
 .wronged:
         inc bh
         xor ecx, ecx
-        call printscreen ; print characters. We'll see how this goes.
+        ;call printscreen ; print characters. We'll see how this goes.
         popad
         ret
 .wrong:
