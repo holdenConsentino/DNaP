@@ -757,9 +757,8 @@ keyboard_handler:
 
         mov byte [keybuffer + ebx], al
         mov byte [keybuffer + ebx + 1], 0
-        inc word [endcoordxy]
-        jg .incrow
         pop ebx
+        inc word [endcoordxy]
         
 .skipkeyboard:
 
@@ -774,7 +773,9 @@ keyboard_handler:
 .wronged:
         inc bh
         xor ecx, ecx
-        ;call printscreen ; print characters. We'll see how this goes.
+        mov byte [coordxy], 3
+        mov byte [coordxy + 1], 2 ; TEMP
+        call printscreen ; print characters. We'll see how this goes.
         popad
         ret
 .wrong:
