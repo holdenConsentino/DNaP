@@ -598,8 +598,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         inc ecx
         cmp ecx, 16
         jle .preseter ; JLE
-
-        inc word [endcoordxy]
+        
         popfd
         popad
         ret
@@ -853,6 +852,9 @@ printfullscreen: ; DOES NOT SAVE
         ret
         
 printscreen: ; DOES NOT SAVE
+        mov bh, byte [coordxy]
+        xor ecx, ecx
+        mov bl, byte [coordxy + 1]
         mov esi, keybuffer
         call printstring
         ret
