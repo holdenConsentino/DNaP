@@ -643,9 +643,9 @@ printstring: ; string at esi
         xor ecx, ecx ; ??``
         call printchar
         inc bl
-        cmp bl, 51
+        cmp bl, 50
         pop ecx
-        jg .newlinecount
+        jae .newlinecount
         loop .strloopcount
         
         popad
@@ -665,8 +665,8 @@ printstring: ; string at esi
         xor ecx, ecx; ??
         call printchar
         inc bl
-        cmp bl, 51
-        jg .newlinenull
+        cmp bl, 50
+        jge .newlinenull
         jmp .strloopnull
 
 .endstrloop:
@@ -765,10 +765,12 @@ keyboard_handler:
         mov al, 0x20 ; Send EOI
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
-        mov bh, byte [coordxy]
-        mov bl, 1
-        cmp bh, 33
-        mov esi, keybuffer
+        mov bh, byte [cursorxy + 1]
+        mov bl, byte [cursorxy]
+        dec bl ; why?!??
+        call cursorerase
+        add bl, 2 ; inc
+        cmp bl, -1
         jae .wrong
 .wronged:
         inc bh
@@ -783,16 +785,11 @@ keyboard_handler:
         jmp .wronged
 .enter:
 
-        mov bx, word [endcoordxy]
-        movzx ecx,bh
-        movzx ebx, bl
-        dec ecx
-        dec ebx
-        imul ecx, 51
-        add ecx, ebx
+        movzx ecx, word [endcoordxy]
         mov word [keybuffer + ecx], 0x0A0D
         mov byte [keybuffer + ecx + 2], 0
         inc byte [coordxy]
+        add [endcoordxy], 2
         jmp .skipkeyboard
 
 .uppercase:
@@ -813,34 +810,17 @@ keyboard_handler:
 .unshift:
         mov byte [iscapitol], 0
         jmp .skipkeyboard
-        
-.incrow:
-        mov byte [endcoordxy + 1], 1
-        inc byte [endcoordxy]
-        jmp .skipkeyboard
 
 .backspace:
-        mov bx, [endcoordxy]
-        test bl, bl
-        jz .decrow
-.rowed:
-        movzx ecx, bh
-        movzx ebx, bl
-        dec ecx
-        dec ebx
-        imul ecx, 51
-        add ecx, ebx
+        movzx ecx, word [endcoordxy]
         mov byte [keybuffer + ecx], 0x20
-        dec byte [endcoordxy + 1]
+        dec word [endcoordxy]
+        mov bl, 1 ; CL
+        mov bh, 3
         dec bl
         call cursorerase
         inc bl
         jmp .skipkeyboard
-
-.decrow:
-        mov byte [endcoordxy - 1], 51
-        dec byte [endcoordxy]
-        jmp .rowed
 
 printfullscreen: ; DOES NOT SAVE
         pushad
@@ -889,7 +869,7 @@ clearscreen: ; DOES SAVE
         popfd
         ret
 
-printcursor:
+printcursor: ; row, column in bh, bl
         pushad
         pushfd
         cli
@@ -943,6 +923,7 @@ cursorerase:
         mov ecx, 32
 .cursorerase:
         xor eax, eax
+        add eax, esi
         mov esi, edi
         rep stosb
         inc ebx
