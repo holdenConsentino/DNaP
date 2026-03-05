@@ -935,6 +935,18 @@ cursorerase:
         popad
         ret
 
+hash: ; hash. Value at esi. length of value to be hashed in eax. returns 32 bit hash.
+        mov ecx, eax ; yes yes I know but to keep the ABI this is best
+        xor edx, edx
+        mov eax, 3423
+.hashloop:
+        rol eax, ecx
+        movzx ebx, byte [esi + edx]
+        add eax, ebx
+        inc edx
+        loop .hashloop
+        ret
+
 section .data
 
 
