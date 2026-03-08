@@ -1,6 +1,6 @@
 ;Good luck 
 ; EAX return ; EBX ECX EDX STACK args ; EDI ESI arrays/stringops ; EBP ESP don't even think about it ; EFLAGS NO ; EIP VERY NO
-
+; maybe use [coordxy]
 
 org 0x7C00
 [bits 16]
@@ -299,9 +299,13 @@ picmap: ; remap PIC
         xor eax, eax
         rep stosb
 
-        mov byte [keybuffer], "A"
-        mov byte [keybuffer + 1], "B"
-        mov byte [keybuffer + 2], 0
+        mov edi, filestat
+        mov ecx, 2040
+        xor eax, eax
+        add edi, 8
+        rep stosb
+
+        ; Add function to read files from disk to buffer             
 
         sti
 
@@ -312,7 +316,7 @@ picmap: ; remap PIC
         call printstring
 
         mov byte [coordxy], 2
-        mov byte [coordxy + 1], 4
+        mov byte [coordxy + 1], 3
 
         mov esi, cmdprompt
         xor ecx, ecx
@@ -320,10 +324,14 @@ picmap: ; remap PIC
         mov bl, 1
         call printstring
 
+        mov bh, 1
+        mov bl, 7
+        call cursorerase
 
         mov bh, 2
         mov bl, 3
-        call printcursor
+        call cursorerase
+
 term:
         hlt
         jmp term
@@ -561,8 +569,8 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         dec ebx
         shl ecx, 4 ; col`
         shl ebx, 4
-        shl edx, 1
-        add ebx, edx 
+        ;shl edx, 1
+        ;add ebx, edx 
         imul ebx, eax ; ecx, eax
         shl ecx, 1 ; ebx
         add ebx, ecx ; find offset
@@ -643,7 +651,7 @@ printstring: ; string at esi
         xor ecx, ecx ; ??``
         call printchar
         inc bl
-        cmp bl, 50
+        cmp bl, 51
         pop ecx
         jae .newlinecount
         loop .strloopcount
@@ -665,11 +673,12 @@ printstring: ; string at esi
         xor ecx, ecx; ??
         call printchar
         inc bl
-        cmp bl, 50
+        cmp bl, 51
         jge .newlinenull
         jmp .strloopnull
 
 .endstrloop:
+        call printcursor ; ???
         popad
         popfd
         ret
@@ -766,17 +775,15 @@ keyboard_handler:
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
         mov bh, byte [cursorxy + 1]
-        mov bl, byte [cursorxy]
+        mov bh, byte [cursorxy]
         dec bl ; why?!??
         call cursorerase
-        add bl, 2 ; inc
+        add bl, 2 ; inc ???
         cmp bl, -1
         jae .wrong
 .wronged:
         inc bh
         xor ecx, ecx
-        mov byte [coordxy], 3
-        mov byte [coordxy + 1], 2 ; TEMP
         call printscreen ; print characters. We'll see how this goes.
         popad
         ret
@@ -817,7 +824,9 @@ keyboard_handler:
         dec word [endcoordxy]
         mov bl, 1 ; CL
         mov bh, 3
-        dec bl
+        dec bl ; ???
+        call cursorerase
+        sub bl, 2
         call cursorerase
         inc bl
         jmp .skipkeyboard
@@ -837,6 +846,7 @@ printscreen: ; DOES NOT SAVE
         xor ecx, ecx
         mov bl, byte [coordxy + 1]
         mov esi, keybuffer
+        ;add esi, dword [strtcoordxy] ???
         call printstring
         ret
 
@@ -876,6 +886,8 @@ printcursor: ; row, column in bh, bl
         mov edi, [framebuffer]
         push ebx
         movzx ecx, bh ; row
+        cmp bl, 51
+        jae .end
         movzx ebx, bl ; column
         movzx edx, word [pitch]
         dec ecx
@@ -896,8 +908,8 @@ printcursor: ; row, column in bh, bl
         mov edi, esi
         add edi, edx
         cmp ebx, 16
-        jl .cursorloop
-
+        jle .cursorloop
+.end:
         pop ebx
         mov word [cursorxy], bx       
         popfd
@@ -920,10 +932,9 @@ cursorerase:
         add edi, ebx
         add edi, ecx
         xor ebx, ebx
-        mov ecx, 32
 .cursorerase:
+        mov ecx, 32
         xor eax, eax
-        add eax, esi
         mov esi, edi
         rep stosb
         inc ebx
@@ -946,6 +957,9 @@ hash: ; hash. Value at esi. length of value to be hashed in eax. returns 32 bit 
         inc edx
         loop .hashloop
         ret
+
+list_current_dir:
+        mov edi, dword [currentdir + 4]
 
 section .data
 
@@ -991,6 +1005,8 @@ strtcoordxy dw 0
 endcoordxy dw 0
 cursorblink dw 0
 cursorxy dw 0
+currentdir dd 0
+; remember that filestat needs name, size, attributes
 
 section .bss
 coordxy resb 2
