@@ -775,7 +775,7 @@ keyboard_handler:
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
         mov bh, byte [cursorxy + 1]
-        mov bh, byte [cursorxy]
+        mov bl, byte [cursorxy]
         dec bl ; why?!??
         call cursorerase
         add bl, 2 ; inc ???
@@ -935,6 +935,7 @@ cursorerase:
 .cursorerase:
         mov ecx, 32
         xor eax, eax
+        mov eax, 0xAA ; ???
         mov esi, edi
         rep stosb
         inc ebx
