@@ -1,6 +1,7 @@
 ;Good luck 
 ; EAX return ; EBX ECX EDX STACK args ; EDI ESI arrays/stringops ; EBP ESP don't even think about it ; EFLAGS NO ; EIP VERY NO
 ; maybe use [coordxy], update startcoordxy and endcoordxy
+; or use endcoordxy and calc cursor on fly, store old cursor in coordxy
 
 org 0x7C00
 [bits 16]
@@ -117,6 +118,10 @@ _start:
         lgdt [gdt_descriptor]
         mov eax, cr0
         or eax, 0x1
+        or eax, (1 << 1)
+        or eax, (1 << 5)
+        and eax, ~(1 << 2)
+        fninit
         mov cr0, eax                
         jmp 0x08:0x7E00
 
@@ -228,7 +233,7 @@ isr%1:
         push %1
         jmp default_handler
 %endmacro
-
+``
 %macro ERRORCODE 1
 isr%1:
         push %1
