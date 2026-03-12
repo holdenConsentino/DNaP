@@ -1,6 +1,6 @@
 ;Good luck 
 ; EAX return ; EBX ECX EDX STACK args ; EDI ESI arrays/stringops ; EBP ESP don't even think about it ; EFLAGS NO ; EIP VERY NO
-; maybe use [coordxy]
+; maybe use [coordxy], update startcoordxy and endcoordxy
 
 org 0x7C00
 [bits 16]
@@ -94,6 +94,26 @@ _start:
         
 .ramloaded: ; Load Global Descriptor Table
         cli ; this is it, boys
+        push bp        ; get E820
+.map:
+        mov di, 0x2004 ; wow imagine being a millenial haha
+        xor ebx, ebx
+        xor bp, bp
+        mov edx, 0x534D4150
+.maploop:
+        mov eax, 0xE820
+        mov ecx, 24
+        int 0x15
+        jc .mapdone
+        inc bp
+        add di, 24
+        test ebx, ebx ; ???
+        jz .mapdone
+        jmp .maploop
+.mapdone:
+        mov word [0x2000], bp
+        pop bp
+        
         lgdt [gdt_descriptor]
         mov eax, cr0
         or eax, 0x1
@@ -329,7 +349,7 @@ picmap: ; remap PIC
         call cursorerase
 
         mov bh, 2
-        mov bl, 3
+        mov bl, 4
         call cursorerase
 
 term:
@@ -438,6 +458,10 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
+        mov eax, dword [clocktimer + 4]
+        mov bh, 6
+        mov bl, 2
+        call reghexprint ; TEMP
         ret
 
 DivZero:
@@ -506,7 +530,7 @@ DevNotAvail:
 DoubleFault:
         SCREENFILL 0x00000000
         PRINTMSG doublefaultmsg, 0, 0xF800
-        ret ; yes, going back
+        TERMINATE ; yes, going back
 TSSCorrupt:
         SCREENFILL 0x00000000
         PRINTMSG tsscorruptmsg, 0, 0xF800
@@ -567,8 +591,8 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         movzx ebx, bh
         dec ecx
         dec ebx
-        shl ecx, 4 ; col`
-        shl ebx, 4
+        shl ecx, 4 ; col
+        shl ebx, 4 ; other one probably i dunno figure it out yourself 
         ;shl edx, 1
         ;add ebx, edx 
         imul ebx, eax ; ecx, eax
@@ -581,6 +605,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         movzx eax, byte [printarguments + 4] ; don't overwrite character in al
 .skipload:
         sub al, 0x20
+        ; probably super slow but whatever
 .pitchedmaybe:
         mov edi, [framebuffer]
         shl eax, 2
@@ -702,8 +727,9 @@ printstring: ; string at esi
         
         
                 
-reghexprint: ; first arg in ebx, coords in ecx yes I know it's weird
+reghexprint: ; first arg in eax, coords in ebx yes I know it's weird
         pushad
+        push ebx
         mov ebp, esp
         sub esp, 9
         xor eax, eax
@@ -711,20 +737,20 @@ reghexprint: ; first arg in ebx, coords in ecx yes I know it's weird
         xor edx, edx
 
 .convloop:
-        movzx eax, bl
-        and al, 0x0F
-        mov al, byte [hexlut + eax]
-        mov byte [esp + edx], al
-        movzx eax, bl
-        shr eax, 4
-        mov al, byte [hexlut + eax]
-        mov byte [esp + edx + 1], al
+        movzx ebx, al
+        and bl, 0x0F
+        mov bl, byte [hexlut + ebx]
+        mov byte [esp + edx], bl
+        movzx ebx, al
+        shr ebx, 4
+        mov bl, byte [hexlut + ebx]
+        mov byte [esp + edx + 1], bl
         add edx, 2
-        shr ebx, 8
+        shr eax, 8
         loop .convloop
         
         mov esi, esp
-        mov bx, cx
+        pop ebx
         call printstring
 
         mov esp, ebp
@@ -776,15 +802,20 @@ keyboard_handler:
         mov word [printarguments + 5], 0xFFFF
         mov bh, byte [cursorxy + 1]
         mov bl, byte [cursorxy]
+        ;inc dword [endcoordxy]
         dec bl ; why?!??
         call cursorerase
-        add bl, 2 ; inc ???
+        inc bl
+        call cursorerase
+        inc bl ; ??????????
+        ;add bl, 2 ; inc ???
         cmp bl, -1
         jae .wrong
 .wronged:
         inc bh
         xor ecx, ecx
-        call printscreen ; print characters. We'll see how this goes.
+        call clearscreen ; TEMP
+        call printfullscreen ; !FULL print characters. We'll see how this goes.
         popad
         ret
 .wrong:
@@ -792,11 +823,11 @@ keyboard_handler:
         jmp .wronged
 .enter:
 
-        movzx ecx, word [endcoordxy]
+        mov ecx, dword [endcoordxy]
         mov word [keybuffer + ecx], 0x0A0D
         mov byte [keybuffer + ecx + 2], 0
         inc byte [coordxy]
-        add [endcoordxy], 2
+        add [endcoordxy], 1 ; 2
         jmp .skipkeyboard
 
 .uppercase:
@@ -846,7 +877,7 @@ printscreen: ; DOES NOT SAVE
         xor ecx, ecx
         mov bl, byte [coordxy + 1]
         mov esi, keybuffer
-        ;add esi, dword [strtcoordxy] ???
+        ;add esi, dword [strtcoordxy]; ???
         call printstring
         ret
 
@@ -860,10 +891,15 @@ clearscreen: ; DOES SAVE
         xor eax, eax
         rep stosb
 
-        mov esi, [framebuffer]
+        mov edi, [framebuffer]
         mov ecx, (800 * 600 * 2)
         xor eax, eax
         rep stosb
+
+        ;mov dword [strtcoordxy], 0 ; ??
+        ;mov dword [endcoordxy], 0
+        ;mov byte [coordxy], 1
+        ;mov byte [coordxy + 1], 1
 
         mov byte [strtcoordxy], 1
         mov byte [endcoordxy], 1
@@ -1016,3 +1052,10 @@ scratchpad resq 1024 ; 8 KiB scratchpad
 filestat resq 256 ; 4KB scratchpad to hold file addresses, names, and sizes in RAM. Directories are files that hold extended addresses.
                         ; 64 bit filename, 32 bit address, 16 bit size; 16 bit attributes. Can have 128 top-directories. 
 cmdbuffer resb 32
+
+
+; PAGE TABLE STUFF DO NOT TOUCH
+; I AM SERIOUS NO FUNNY BUSINESS
+absolute 0x100000
+pagedirectory resd 1024
+pagetables resd 32 * 1024
