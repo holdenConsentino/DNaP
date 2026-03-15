@@ -8,3 +8,5 @@
 *.sh
 core
 .gitkeys
+*.tasm
+#test assembly files ^ because I'm too lazy to set up TESTING branch
