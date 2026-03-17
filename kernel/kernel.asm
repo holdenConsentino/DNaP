@@ -225,7 +225,8 @@ dw 0xAA55
  ; 32 BIT SECTION START --
 [bits 32]
 %include "macros.inc"
-
+%include "graphics.inc"
+%include "mathlib.inc"
 
 %macro NOERROR 1
 isr%1:

@@ -5,7 +5,7 @@ putpixel: ; Row+1 in EBX, Column+1 in ECX, color in AX ; clobbers EBX EDI EDX EC
   dec ecx
   movzx edx, word [pitch]
   shl ecx, 1
-  imul ebx, ebx, edx ; get offset
+  imul ebx, edx ; get offset
   mov edi, dword [framebuffer]
   add ebx, ecx
   add edi, ebx
@@ -86,10 +86,10 @@ putline: ; coordinates at ESI as (ROW+1,COLUMN+1,ROW+1,COLUMN+1), color in AX
   
 .invertdx:
   neg ebx
-  jmp short .y
+  jmp .y
 .invertdy:
   neg ecx
-  jmp short .dosxcalc
+  jmp  .dosxcalc
 .xequal:
   mov ebx, dword [esi + 4]
   cmp ebx, dword [esi + 12]
@@ -98,4 +98,70 @@ putline: ; coordinates at ESI as (ROW+1,COLUMN+1,ROW+1,COLUMN+1), color in AX
 .break:
   add esp, 20
   pop ebp
+  ret
+
+
+puttriangle: ; ALL VERTICES PUSHED TO STACK ; COLOR IN AX
+  mov esi, esp
+  
+  call putline
+  mov edx, dword [esp + 12] ; 0 4 8 12 | 16 20
+  mov ebx, dword [esp + 8]
+  xchg dword [esp + 20], edx
+  xchg dword [esp + 16], ebx ; 0 4 16 20 8 12
+  mov dword [esp + 12], edx
+  mov dword [esp + 8], ebx
+  call putline
+  mov edx, dword [esp + 16]
+  mov ebx, dword [esp + 20]
+  xchg edx, dword [esp]
+  xchg ebx, dword [esp + 4]
+  call putline
+  ret
+
+%macro FRAME 1
+  push ebp
+  mov ebp, esp
+  sub esp, %1
+%endmacro
+
+%macro ENDFRAME 1
+  add esp, %1
+  pop ebp
+%endmacro
+
+%macro LINE 5
+  push ebp
+  mov ebp, esp
+  sub esp, 16
+  mov esi, esp
+  mov dword [esp], %1
+  mov dword [esp + 4], %2
+  mov dword [esp + 8], %3
+  mov dword [esp + 12], %4
+  mov ax, %5
+  call putline
+  add esp, 16
+  pop ebp
+%endmacro
+
+%macro TRIANGLE 7
+  FRAME 24
+  mov esi, esp
+  mov dword [esp], %1
+  mov dword [esp + 4], %2
+  mov dword [esp + 8], %3
+  mov dword [esp + 12], %4
+  mov dword [esp + 16], %5
+  mov dword [esp + 20], %6
+  mov ax, %7
+  call puttriangle
+  ENDFRAME 24
+%endmacro
+
+blankscreen: ; clearscreen but doesn't kill keybuffer, etc.
+  mov edi, dword [framebuffer]
+  xor eax, eax
+  mov ecx, (800 * 600)
+  rep stosw ;??? for some reason stosd keeps throwing a divbyzero exception
   ret

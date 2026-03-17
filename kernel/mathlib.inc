@@ -8,7 +8,8 @@ atoi: ; takes null terminated string at [ESI] outputs dword in eax clobbers eax 
   sub bl, 0x30
   lea eax, [eax + eax*4]
   add eax, eax
-  add eax, bl
+  movzx ebx, bl
+  add eax, ebx
   inc edx
   jmp .atoiloop
 .break:
@@ -33,7 +34,7 @@ itoaloop:
   add eax, eax
   sub ebx, eax
   mov eax, edx
-  mov byte [edi], ebx
+  mov byte [edi], bl ; DWORD???
   dec edi
   cmp edi, esi
   jge itoaloop
@@ -43,7 +44,7 @@ signeditoaloop:
   cmp ebx, 0
   jge itoaloop
   neg eax
-  call .itoaloop
+  call itoaloop
   mov byte [esi], "-"
   ret
 
@@ -72,17 +73,44 @@ sx2div: ; eax / ebx ; clobbers eax ebx edx ; you know fdiv exists ; signed ; rem
 
 x87log2: ; data at [ebx] ; clobbers eax ebx FPU ; ret in eax
   fld1
-  flds [ebx]
+  fld [ebx]
   fyl2x
   fistp dword [ebx] ; ??
   ret
 
 sx2x87:
   push eax
-  flds dword [esp]
-  fmuls dword [fp65336]
-  fistpl dword [esp]
+  fld dword [esp]
+  fmul dword [fp65336]
+  fistp dword [esp]
   pop eax 
   ret
   fp65336 dd 65336
+
+
   
+%macro x87INTLOAD 1
+  mov eax, %1
+  push eax
+  fild dword [esp]
+  pop eax
+%endmacro
+
+%macro x87FLOAD 1
+  mov eax, %1
+  push eax
+  fild dword [esp]
+  pop eax
+%endmacro
+
+%macro x87IPOP 0
+  push eax
+  fistp dword [esp]
+  pop eax
+%endmacro
+
+%macro x87FPOP 0
+  push eax
+  fistp dword [esp]
+  pop eax
+%endmacro
