@@ -358,6 +358,10 @@ picmap: ; remap PIC
         mov bl, 3 ; ???
         call cursorerase
 
+        mov bh, 2
+        mov bl, 5
+        mov byte [coordxy], 2
+        mov byte [coordxy + 1], 5
 term:
         hlt
         jmp term
