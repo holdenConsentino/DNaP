@@ -7,7 +7,7 @@ org 0x7C00
 [bits 16]
 
 _start:
-        xor ax, ax ; zero out segments
+        mov ax, 0x0000 ; zero out segments
         mov es, ax
         mov ds, ax ; hi :)
         mov ss, ax
@@ -27,7 +27,7 @@ _start:
         test al, al
         jnz .printstack
 
-        xor ax, ax ; zero out ES
+        mov ax, 0 ; zero out ES
         mov es, ax
 
         mov ax, 0x4F01 ; Set up VESA
@@ -121,8 +121,8 @@ _start:
         or eax, (1 << 1)
         or eax, (1 << 5)
         and eax, ~(1 << 2)
-        mov cr0, eax
-        fninit        
+        fninit
+        mov cr0, eax                
         jmp 0x08:0x7E00
 
 halting:
@@ -182,9 +182,9 @@ bootdrive db 0
 othervfail db "VESA FAIL 2", 0x0A, 0x0D, 0x00
 vfail db "VESA FAIL", 0x0A, 0x0D, 0x00
 stackup db "SEG 0 STACK UP", 0x0A, 0x0D, 0x00
-flop db "READ FAIL FLOPPY", 0x0A, 0x0D, 0x00
-disk db "READ FAIL DISK", 0x0A, 0x0D, 0x00
-printframebuffers db "FB SET", 0x0A, 0x0D, 0x00
+flop db "READ FAILURE FLOPPY", 0x0A, 0x0D, 0x00
+disk db "READ FAILURE DISK", 0x0A, 0x0D, 0x00
+printframebuffers db "FRAMEBUFFER SET", 0x0A, 0x0D, 0x00
 genfail db "GENERAL FAILURE",0x0A,0x0D,0x00
 
 
@@ -225,8 +225,7 @@ dw 0xAA55
  ; 32 BIT SECTION START --
 [bits 32]
 %include "macros.inc"
-%include "graphics.inc"
-%include "mathlib.inc"
+
 
 %macro NOERROR 1
 isr%1:
@@ -246,7 +245,7 @@ isr%1:
         mov edi, [framebuffer]
         mov ecx, (800 * 600 * 2)
         mov eax, %1
-        rep stosb
+        rep stosd
 %endmacro
 %macro PRINTMSG 3
         mov esi, %1
@@ -324,7 +323,7 @@ picmap: ; remap PIC
         mov edi, keybuffer
         xor eax, eax
         rep stosb
-        
+
         mov edi, filestat
         mov ecx, 2040
         xor eax, eax
@@ -355,13 +354,9 @@ picmap: ; remap PIC
         call cursorerase
 
         mov bh, 2
-        mov bl, 3 ; ???
+        mov bl, 4
         call cursorerase
 
-        mov bh, 2
-        mov bl, 5
-        mov byte [coordxy], 2
-        mov byte [coordxy + 1], 5
 term:
         hlt
         jmp term
@@ -440,12 +435,10 @@ default_handler:
         ; set up handler
         
         mov eax, [esp + 36] ; get number
-        push eax
         mov ebx, [esp + 40] ; get code
 
         mov ecx, [handlers + eax * 4]
-        call ecx
-        pop eax
+        call ecx        
         
         cmp eax, 32
         jb .no_eoi
@@ -470,9 +463,10 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
-        mov eax, dword [clocktimer]
-        mov edi, [framebuffer]
-        mov dword [edi], eax
+        mov eax, dword [clocktimer + 4]
+        mov bh, 6
+        mov bl, 2
+        call reghexprint ; TEMP
         ret
 
 DivZero:
@@ -723,18 +717,12 @@ printstring: ; string at esi
         jmp .strloopnull
 
 .newlinecount:
-        dec bh ; ???
-        mov bl, 51
-        call cursorerase
-        add bh, 2 ; inc
+        inc bh
         mov bl, 1
         loop .strloopcount
 
 .newlinenull:
-        dec bh
-        mov bl, 51
-        call cursorerase
-        add bh, 2 ; SAME ^
+        inc bh
         mov bl, 1
         jmp .strloopnull
 
@@ -749,9 +737,10 @@ reghexprint: ; first arg in eax, coords in ebx yes I know it's weird
         push ebx
         mov ebp, esp
         sub esp, 9
+        xor eax, eax
         mov ecx, 4
         xor edx, edx
-        mov byte [esp + 8], 0
+
 .convloop:
         movzx ebx, al
         and bl, 0x0F
@@ -764,11 +753,10 @@ reghexprint: ; first arg in eax, coords in ebx yes I know it's weird
         add edx, 2
         shr eax, 8
         loop .convloop
-
-        call printstring
         
         mov esi, esp
         pop ebx
+        call printstring
 
         mov esp, ebp
         pop ebp
@@ -778,6 +766,8 @@ reghexprint: ; first arg in eax, coords in ebx yes I know it's weird
 
 keyboard_handler:
         pushad
+        mov edi, [framebuffer]
+        mov dword [edi], 0xF2E0FFFF
         in al, 0x60
         cmp al, 0xAA
         je .unshift
@@ -803,34 +793,34 @@ keyboard_handler:
  
 .possiblyshifted:
         push ebx
-        mov ebx, dword [endcoordxy]
+        movzx ebx, word [endcoordxy]
 
         mov byte [keybuffer + ebx], al
         mov byte [keybuffer + ebx + 1], 0
         pop ebx
-        inc dword [endcoordxy]
+        inc word [endcoordxy]
         
 .skipkeyboard:
 
         mov al, 0x20 ; Send EOI
         out 0x20, al
         mov word [printarguments + 5], 0xFFFF
-        mov bh, byte [cursorxy + 1] ;???
+        mov bh, byte [cursorxy + 1]
         mov bl, byte [cursorxy]
         ;inc dword [endcoordxy]
-        dec bl ; why?!?? WHAT THE FUCK IS GOING ON HERE
+        dec bl ; why?!??
         call cursorerase
-        add bl, 2
-        ;inc bl
-        ;call cursorerase
-        ;inc bl ; ??????????
+        inc bl
+        call cursorerase
+        inc bl ; ??????????
         ;add bl, 2 ; inc ???
         cmp bl, -1
         jae .wrong
 .wronged:
         inc bh
         xor ecx, ecx
-        call printfullscreen; !FULL print characters. We'll see how this goes. Probably should change to printchar at some point
+        call clearscreen ; TEMP
+        call printfullscreen ; !FULL print characters. We'll see how this goes.
         popad
         ret
 .wrong:
@@ -841,10 +831,8 @@ keyboard_handler:
         mov ecx, dword [endcoordxy]
         mov word [keybuffer + ecx], 0x0A0D
         mov byte [keybuffer + ecx + 2], 0
-        inc ecx
         inc byte [coordxy]
-        add dword [endcoordxy], 2; 1
-        mov dword [strtcoordxy], ecx; ???
+        add [endcoordxy], 1 ; 2
         jmp .skipkeyboard
 
 .uppercase:
@@ -867,9 +855,9 @@ keyboard_handler:
         jmp .skipkeyboard
 
 .backspace:
-        movzx ecx, dword [endcoordxy]
+        movzx ecx, word [endcoordxy]
         mov byte [keybuffer + ecx], 0x20
-        dec dword [endcoordxy]
+        dec word [endcoordxy]
         mov bl, 1 ; CL
         mov bh, 3
         dec bl ; ???
@@ -894,7 +882,7 @@ printscreen: ; DOES NOT SAVE
         xor ecx, ecx
         mov bl, byte [coordxy + 1]
         mov esi, keybuffer
-        add esi, dword [endcoordxy]; ???
+        ;add esi, dword [strtcoordxy]; ???
         call printstring
         ret
 
@@ -902,7 +890,7 @@ clearscreen: ; DOES SAVE
         pushfd
         pushad
         cli
-        mov edi, keybuffer
+        mov esi, keybuffer
         mov ecx, (33 * 51)
         cld
         xor eax, eax
@@ -913,16 +901,16 @@ clearscreen: ; DOES SAVE
         xor eax, eax
         rep stosb
 
-        mov dword [strtcoordxy], 0 ; ??
-        mov dword [endcoordxy], 0
+        ;mov dword [strtcoordxy], 0 ; ??
+        ;mov dword [endcoordxy], 0
         ;mov byte [coordxy], 1
         ;mov byte [coordxy + 1], 1
 
-        ;mov byte [strtcoordxy], 1
-        ;mov byte [endcoordxy], 1
+        mov byte [strtcoordxy], 1
+        mov byte [endcoordxy], 1
         mov byte [coordxy], 1
-        ;mov byte [strtcoordxy + 1], 1
-        ;mov byte [endcoordxy + 1], 1
+        mov byte [strtcoordxy + 1], 1
+        mov byte [endcoordxy + 1], 1
         mov byte [coordxy + 1], 1
 
         mov esi, cmdprompt
@@ -940,7 +928,7 @@ printcursor: ; row, column in bh, bl
         push ebx
         movzx ecx, bh ; row
         cmp bl, 51
-        jae .end ; JAE
+        jae .end
         movzx ebx, bl ; column
         movzx edx, word [pitch]
         dec ecx
@@ -1055,8 +1043,9 @@ printarguments:
 
 CHARSHEET
 
-strtcoordxy dd 0 ; start of command :: @hello
-endcoordxy dd 0 ; end of command :: hello@ 
+strtcoordxy dw 0
+endcoordxy dw 0
+cursorblink dw 0
 cursorxy dw 0
 currentdir dd 0
 ; remember that filestat needs name, size, attributes
