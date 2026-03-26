@@ -7,7 +7,7 @@ org 0x7C00
 [bits 16]
 
 _start:
-        mov ax, 0x0000 ; zero out segments
+        xor ax, ax ; zero out segments
         mov es, ax
         mov ds, ax ; hi :)
         mov ss, ax
@@ -27,7 +27,7 @@ _start:
         test al, al
         jnz .printstack
 
-        mov ax, 0 ; zero out ES
+        xor ax, ax; zero out ES
         mov es, ax
 
         mov ax, 0x4F01 ; Set up VESA
@@ -121,8 +121,8 @@ _start:
         or eax, (1 << 1)
         or eax, (1 << 5)
         and eax, ~(1 << 2)
-        fninit
-        mov cr0, eax                
+        mov cr0, eax
+        fninit ; this might be causing some issues ???          
         jmp 0x08:0x7E00
 
 halting:
@@ -436,10 +436,11 @@ default_handler:
         
         mov eax, [esp + 36] ; get number
         mov ebx, [esp + 40] ; get code
+        push eax
 
         mov ecx, [handlers + eax * 4]
         call ecx        
-        
+        pop eax
         cmp eax, 32
         jb .no_eoi
         cmp eax, 47
@@ -463,10 +464,6 @@ handlers:
 timer_handler:
         add dword [clocktimer], 1
         adc dword [clocktimer + 4], 0
-        mov eax, dword [clocktimer + 4]
-        mov bh, 6
-        mov bl, 2
-        call reghexprint ; TEMP
         ret
 
 DivZero:
@@ -755,9 +752,8 @@ reghexprint: ; first arg in eax, coords in ebx yes I know it's weird
         loop .convloop
         
         mov esi, esp
+        call printstring ; ??? this should work. Just not sure yet. 
         pop ebx
-        call printstring
-
         mov esp, ebp
         pop ebp
         popad
@@ -766,8 +762,6 @@ reghexprint: ; first arg in eax, coords in ebx yes I know it's weird
 
 keyboard_handler:
         pushad
-        mov edi, [framebuffer]
-        mov dword [edi], 0xF2E0FFFF
         in al, 0x60
         cmp al, 0xAA
         je .unshift
@@ -793,12 +787,12 @@ keyboard_handler:
  
 .possiblyshifted:
         push ebx
-        movzx ebx, word [endcoordxy]
+        mov ebx, dword [endcoordxy]
 
         mov byte [keybuffer + ebx], al
         mov byte [keybuffer + ebx + 1], 0
         pop ebx
-        inc word [endcoordxy]
+        inc dword [endcoordxy]
         
 .skipkeyboard:
 
@@ -819,8 +813,9 @@ keyboard_handler:
 .wronged:
         inc bh
         xor ecx, ecx
-        call clearscreen ; TEMP
-        call printfullscreen ; !FULL print characters. We'll see how this goes.
+        call printscreen
+        ;call clearscreen ; TEMP
+        ;call printfullscreen ; !FULL print characters. We'll see how this goes. SHould probably change to printchar eventually
         popad
         ret
 .wrong:
@@ -831,8 +826,10 @@ keyboard_handler:
         mov ecx, dword [endcoordxy]
         mov word [keybuffer + ecx], 0x0A0D
         mov byte [keybuffer + ecx + 2], 0
+        inc ecx
         inc byte [coordxy]
-        add [endcoordxy], 1 ; 2
+        add dword [endcoordxy], 2 ; 1
+        mov dword [strtcoordxy], ecx; ???
         jmp .skipkeyboard
 
 .uppercase:
@@ -855,9 +852,9 @@ keyboard_handler:
         jmp .skipkeyboard
 
 .backspace:
-        movzx ecx, word [endcoordxy]
+        mov ecx, dword [endcoordxy]
         mov byte [keybuffer + ecx], 0x20
-        dec word [endcoordxy]
+        dec dword [endcoordxy]
         mov bl, 1 ; CL
         mov bh, 3
         dec bl ; ???
@@ -882,7 +879,7 @@ printscreen: ; DOES NOT SAVE
         xor ecx, ecx
         mov bl, byte [coordxy + 1]
         mov esi, keybuffer
-        ;add esi, dword [strtcoordxy]; ???
+        add esi, dword [endcoordxy]; ??? start?
         call printstring
         ret
 
@@ -890,7 +887,7 @@ clearscreen: ; DOES SAVE
         pushfd
         pushad
         cli
-        mov esi, keybuffer
+        mov edi, keybuffer
         mov ecx, (33 * 51)
         cld
         xor eax, eax
@@ -1042,11 +1039,11 @@ printarguments:
         db 0
 
 CHARSHEET
-
-strtcoordxy dw 0
-endcoordxy dw 0
-cursorblink dw 0
-cursorxy dw 0
+align 8
+strtcoordxy dd 0
+endcoordxy dd 0
+cursorblink dd 0
+cursorxy dd 0
 currentdir dd 0
 ; remember that filestat needs name, size, attributes
 
