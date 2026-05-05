@@ -594,9 +594,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         dec ecx
         dec ebx
         shl ecx, 4 ; col
-        shl ebx, 4 ; other one probably i dunno figure it out yourself 
-        ;shl edx, 1
-        ;add ebx, edx 
+        shl ebx, 4 ; other one probably i dunno figure it out yourself (row)
         imul ebx, eax ; ecx, eax
         shl ecx, 1 ; ebx
         add ebx, ecx ; find offset
@@ -855,10 +853,10 @@ keyboard_handler:
         mov ecx, dword [endcoordxy]
         mov byte [keybuffer + ecx], 0x20
         dec dword [endcoordxy]
-        mov bl, 1 ; CL
-        mov bh, 3
-        dec bl ; ???
-        call cursorerase
+        ;mov bl, 1 ; CL
+        ;mov bh, 3
+        ;dec bl ; ???
+        ;call cursorerase  ;temp
         sub bl, 2
         call cursorerase
         inc bl
