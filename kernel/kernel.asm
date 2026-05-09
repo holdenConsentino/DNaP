@@ -877,7 +877,7 @@ printscreen: ; DOES NOT SAVE
         xor ecx, ecx
         mov bl, byte [coordxy + 1]
         mov esi, keybuffer
-        add esi, dword [endcoordxy]; ??? start?
+        ;add esi, dword [endcoordxy]; ??? start?
         call printstring
         ret
 
