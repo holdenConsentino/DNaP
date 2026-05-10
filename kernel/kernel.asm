@@ -607,7 +607,7 @@ printchar: ; well mess I guess we're doing it the hard way. character in al, row
         sub al, 0x20
         ; probably super slow but whatever
 .pitchedmaybe:
-        mov edi, [framebuffer]
+        mov edi, doublebuffer ; [framebuffer]
         shl eax, 2
         add edi, ebx ; get actual address
         lea esi, [chars + eax*8] ; get address to char and framebuffer
@@ -891,7 +891,7 @@ clearscreen: ; DOES SAVE
         xor eax, eax
         rep stosb
 
-        mov edi, [framebuffer]
+        mov edi, doublebuffer ; [framebuffer]
         mov ecx, (800 * 600 * 2)
         xor eax, eax
         rep stosb
@@ -919,7 +919,7 @@ printcursor: ; row, column in bh, bl
         pushad
         pushfd
         cli
-        mov edi, [framebuffer]
+        mov edi, doublebuffer ;[framebuffer]
         push ebx
         movzx ecx, bh ; row
         cmp bl, 51
@@ -956,7 +956,7 @@ cursorerase:
         pushad
         pushfd
         cli
-        mov edi, [framebuffer]
+        mov edi, doublebuffer;[framebuffer]
         movzx ecx, bh ; row
         movzx ebx, bl ; column
         movzx edx, word [pitch]
@@ -993,6 +993,13 @@ hash: ; hash. Value at esi. length of value to be hashed in eax. returns 32 bit 
         add eax, ebx
         inc edx
         loop .hashloop
+        ret
+
+blit: ; uses ESI, EDI, ECX does not save
+        lea esi, [doublebuffer]
+        mov edi, dword [framebuffer]
+        mov ecx, 800 * 600 / 4 ; ???
+        rep stosd
         ret
 
 list_current_dir:
@@ -1052,7 +1059,7 @@ scratchpad resq 1024 ; 8 KiB scratchpad
 filestat resq 256 ; 4KB scratchpad to hold file addresses, names, and sizes in RAM. Directories are files that hold extended addresses.
                         ; 64 bit filename, 32 bit address, 16 bit size; 16 bit attributes. Can have 128 top-directories. 
 cmdbuffer resb 32
-
+doublebuffer resw 800*600
 
 ; PAGE TABLE STUFF DO NOT TOUCH
 ; I AM SERIOUS NO FUNNY BUSINESS
