@@ -71,7 +71,7 @@ _start:
         mov es, bx
         mov bx, 0x7E00
         int 0x13
-        jc floppyfail
+        jc floppyfail ; abort read
 
         mov ah, 0x02
         mov al, 18
@@ -83,15 +83,15 @@ _start:
         mov es, bx
         mov bx, 0xA000
         int 0x13
-        jc floppyfail
+        jc floppyfail ; abort read
                 
-        jmp .ramloaded
+        jmp .ramloaded ; system loaded
 .hdd:
         mov ah, 0x42 ; read from HDD
         mov dl, [bootdrive]
         mov si, disk_packet
         int 0x13
-        jc diskfail
+        jc diskfail ; abort read
         
 .ramloaded: ; Load Global Descriptor Table
         cli ; this is it, boys
@@ -100,22 +100,22 @@ _start:
         mov di, 0x2004 ; wow imagine being a millenial haha
         xor ebx, ebx
         xor bp, bp
-        mov edx, 0x534D4150
+        mov edx, 0x534D4150 ; begin setting up paging tables, identity mapped
 .maploop:
-        mov eax, 0xE820
-        mov ecx, 24
-        int 0x15
-        jc .mapdone
-        inc bp
-        add di, 24
-        test ebx, ebx ; ???
-        jz .mapdone
-        jmp .maploop
+       mov eax, 0xE820
+       mov ecx, 24
+       int 0x15
+       jc .mapdone
+       inc bp
+       add di, 24
+       test ebx, ebx ; ???
+       jz .mapdone
+       jmp .maploop
 .mapdone:
         mov word [0x2000], bp
         pop bp
-        
-        lgdt [gdt_descriptor]
+       
+        lgdt [gdt_descriptor] ; GDT loaded
         mov eax, cr0
         or eax, 0x1
         or eax, (1 << 1)
@@ -129,7 +129,7 @@ halting:
         mov si, genfail ; print general failure message and halt
         mov ah, 0x0E
 .looped:
-        lodsb
+        lodsb ; printloop
         int 0x10
         test al, al
         jnz .looped
@@ -225,7 +225,8 @@ dw 0xAA55
  ; 32 BIT SECTION START --
 [bits 32]
 %include "macros.inc"
-
+;%include "math.inc"
+; %include "graphics.inc"
 
 %macro NOERROR 1
 isr%1:
@@ -260,7 +261,7 @@ isr%1:
 
   stagetwostart: ; set segments
         
-        mov ax, 0x10
+        mov ax, 0x10 ; set segments at 16
         mov ss, ax
         mov ds, ax
         mov es, ax
@@ -272,7 +273,7 @@ isr%1:
         
         mov edi, idt_buffer
         mov esi, isr_stub
-        mov ecx, 256 ; for now. 256 later. 
+        mov ecx, 256 ; for now. 256 later. ; it's later now 
 .idtloop:
         mov eax, [esi] ; generate IDT
         mov [edi], ax
@@ -283,7 +284,7 @@ isr%1:
         mov word [edi + 6], ax
         add esi, 4
         add edi, 8
-        loop .idtloop
+        loop .idtloop ; idt set up
 
         lidt [idt_descriptor]
 picmap: ; remap PIC
@@ -324,7 +325,7 @@ picmap: ; remap PIC
         xor eax, eax
         rep stosb
 
-        mov edi, filestat
+        mov edi, filestat ; initializing top-level filesystem
         mov ecx, 2040
         xor eax, eax
         add edi, 8
@@ -332,8 +333,10 @@ picmap: ; remap PIC
 
         ; Add function to read files from disk to buffer             
 
-        sti
-
+        sti ; interrupts set
+        ; testing stuff >>>
+        ;
+        call clearscreen
         mov esi, printstringtst
         xor ecx, ecx
         mov bh, 1
@@ -357,7 +360,9 @@ picmap: ; remap PIC
         mov bl, 4
         call cursorerase
 
-term:
+        call blit
+
+term: ; halt system
         hlt
         jmp term
         ; MAIN
@@ -423,7 +428,7 @@ isr_stub:
 
 %if ($ - isr_stub) != (256 * 4)
         %error "Guess who messed up the IDT stubs? You did! :)"
-%endif
+%endif ; Did you mess up the IDT? Best to find out now :)
 
 
 
@@ -446,7 +451,7 @@ default_handler:
         cmp eax, 47
         ja .no_eoi  
         mov al, 0x20
-        out 0x20, al
+        out 0x20, al ; kill PIC
         out 0xA0, al
         .no_eoi:
         popad
@@ -532,7 +537,7 @@ DevNotAvail:
 DoubleFault:
         SCREENFILL 0x00000000
         PRINTMSG doublefaultmsg, 0, 0xF800
-        TERMINATE ; yes, going back
+        TERMINATE
 TSSCorrupt:
         SCREENFILL 0x00000000
         PRINTMSG tsscorruptmsg, 0, 0xF800
@@ -999,7 +1004,7 @@ blit: ; uses ESI, EDI, ECX does not save
         lea esi, [doublebuffer]
         mov edi, dword [framebuffer]
         mov ecx, 800 * 600 / 4 ; ???
-        rep stosd
+        rep movsd
         ret
 
 list_current_dir:
