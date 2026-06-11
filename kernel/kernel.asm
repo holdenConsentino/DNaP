@@ -96,25 +96,7 @@ _start:
 .ramloaded: ; Load Global Descriptor Table
         cli ; this is it, boys
         push bp        ; get E820
-.map:
-        mov di, 0x2004 ; wow imagine being a millenial haha
-        xor ebx, ebx
-        xor bp, bp
-        mov edx, 0x534D4150 ; begin setting up paging tables, identity mapped
-.maploop:
-       mov eax, 0xE820
-       mov ecx, 24
-       int 0x15
-       jc .mapdone
-       inc bp
-       add di, 24
-       test ebx, ebx ; ???
-       jz .mapdone
-       jmp .maploop
-.mapdone:
-        mov word [0x2000], bp
-        pop bp
-       
+      
         lgdt [gdt_descriptor] ; GDT loaded
         mov eax, cr0
         or eax, 0x1
@@ -226,7 +208,7 @@ dw 0xAA55
 [bits 32]
 %include "macros.inc"
 ;%include "math.inc"
-; %include "graphics.inc"
+
 
 %macro NOERROR 1
 isr%1:
@@ -335,7 +317,6 @@ picmap: ; remap PIC
 
         sti ; interrupts set
         ; testing stuff >>>
-        ;
         call clearscreen
         mov esi, printstringtst
         xor ecx, ecx
@@ -817,6 +798,7 @@ keyboard_handler:
         inc bh
         xor ecx, ecx
         call printscreen
+        call blit
         ;call clearscreen ; TEMP
         ;call printfullscreen ; !FULL print characters. We'll see how this goes. SHould probably change to printchar eventually
         popad
@@ -1009,6 +991,9 @@ blit: ; uses ESI, EDI, ECX does not save
 
 list_current_dir:
         mov edi, dword [currentdir + 4]
+
+
+%include "graphics.inc"
 
 section .data
 
